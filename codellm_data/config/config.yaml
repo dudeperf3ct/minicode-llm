@@ -1,0 +1,37 @@
+# Configuration for CodeLLM Data Processing Pipeline
+
+# Directory Structure
+# data/
+#   ├── raw/           - Raw dataset from S3
+#   ├── processed/     - Processed metadata and statistics
+#   ├── content/       - Downloaded file contents
+#   └── logs/          - Processing logs
+
+# Paths (relative to project root or absolute)
+data_dir: "data"
+
+# S3 Dataset Configuration
+s3_dataset:
+  s3_url: "s3://softwareheritage/graph/2019-01-28-popular-3k-python/parquet"
+  dataset_name: "2019-01-28-popular-3k-python"
+  parallelism: 5
+  auto_download: true
+
+# Ray Processing Configuration
+ray:
+  batch_size: 10
+
+# SWH API Configuration
+swh_api:
+  base_url: "https://archive.softwareheritage.org/api/1"
+  max_concurrent: 5 # Reduced from 10 to avoid overwhelming the API
+  timeout: 30
+  max_retries: 5 # Increased retries to handle rate limits better
+  requests_per_second: 5 # Reduced from 20 to be more conservative
+
+# Data Processing Configuration
+processing:
+  file_extensions:
+    - ".py"
+  file_patterns:
+    - "(?i)^license" # Matches LICENSE, LICENSE.txt, license.hunspell, etc. (case-insensitive)

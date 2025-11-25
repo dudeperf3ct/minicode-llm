@@ -1,31 +1,16 @@
 [project]
-name = "codellm_data"
+name = "codellm-tokenizer"
 version = "0.1.0"
-description = "Download and preprocess data required for training"
+description = "Train a tokenizer on swallcode pretrained dataset."
 readme = "README.md"
 requires-python = ">=3.12"
-license = { file = "LICENSE" }
-authors = [
-    { name = "dudeperf3ct" }
-]
 dependencies = [
-    "httpx>=0.28.1",
-    "polars>=1.35.1",
-    "pydantic>=2.0.0",
-    "pyyaml>=6.0.0",
-    "ray[default]>=2.51.1",
-    "swh-datasets>=2.0.2",
-    "tqdm>=4.67.1",
-    "loguru>=0.7.3",
-    "python-dotenv>=1.2.1",
-    "pyrate-limiter>=3.6.0",
+    "tokenizers>=0.22.1",
 ]
 
 [dependency-groups]
 dev = [
-    "pytest>=8.0.0",
-    "pytest-cov>=4.1.0",
-    "pre-commit>=3.5.0",
+    "pre-commit>=4.5.0",
 ]
 
 # ruff configuration

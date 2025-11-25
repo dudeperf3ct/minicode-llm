@@ -43,7 +43,13 @@ class SWHAPIConfig(BaseModel):
         description="Base URL for SWH API",
     )
     max_concurrent: int = Field(default=10, description="Maximum concurrent HTTP connections")
-    requests_per_second: int = Field(default=20, description="Rate limit: requests per second")
+    requests_per_hour: int = Field(
+        default=120,
+        description=(
+            "Rate limit: maximum API requests per hour "
+            "(120 anonymous, 1200 with authentication per SWH docs)"
+        ),
+    )
     timeout: int = Field(default=30, description="Request timeout in seconds")
     max_retries: int = Field(default=3, description="Maximum retry attempts")
     bearer_token: str | None = Field(
@@ -53,11 +59,6 @@ class SWHAPIConfig(BaseModel):
     max_files: int | None = Field(
         default=None, description="Maximum number of files to download from API."
     )
-
-    @property
-    def rate_limit_delay(self) -> float:
-        """Calculate delay between requests."""
-        return 1.0 / self.requests_per_second
 
     @property
     def headers(self) -> dict:

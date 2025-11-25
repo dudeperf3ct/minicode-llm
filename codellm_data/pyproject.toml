@@ -18,6 +18,7 @@ dependencies = [
     "tqdm>=4.67.1",
     "loguru>=0.7.3",
     "python-dotenv>=1.2.1",
+    "pyrate-limiter>=3.6.0",
 ]
 
 [dependency-groups]
@@ -75,21 +76,6 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     "-ra",
-]
-
-# pytest coverage configuration
-[tool.coverage.run]
-source = ["codellm_data"]
-omit = ["tests/*"]
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if __name__ == .__main__.:",
-    "if TYPE_CHECKING:",
 ]
 
 # typos configuration

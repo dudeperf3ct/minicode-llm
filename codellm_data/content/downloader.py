@@ -9,6 +9,7 @@ from pathlib import Path
 import httpx
 import polars as pl
 from loguru import logger
+from pyrate_limiter import BucketFullException, Duration, Limiter, Rate
 from tqdm.asyncio import tqdm
 
 from codellm_data.content.models import DownloadResult, DownloadStatus, FileMetadata
@@ -16,8 +17,7 @@ from codellm_data.content.models import DownloadResult, DownloadStatus, FileMeta
 # Constants for rate limit thresholds
 RATE_LIMIT_CRITICAL_RATIO = 0.1  # Less than 10% remaining
 RATE_LIMIT_WARNING_RATIO = 0.3  # Less than 30% remaining
-RATE_LIMIT_CRITICAL_MULTIPLIER = 3  # Multiply base delay by 3
-RATE_LIMIT_WARNING_MULTIPLIER = 2  # Multiply base delay by 2
+SECONDS_PER_HOUR = 3600.0
 
 # HTTP status codes
 HTTP_NOT_FOUND = 404
@@ -30,25 +30,37 @@ class SWHContentDownloader:
     def __init__(self, config) -> None:
         """Init."""
         self.config = config
+        # If bearer token is provided, increase rate limit to 1200 per SWH docs
+        if self.config.bearer_token:
+            logger.info(
+                "Bearer token detected; bumping requests_per_hour from %s to 1200 per SWH limits",
+                self.config.requests_per_hour,
+            )
+            self.config.requests_per_hour = 1200
         self._semaphore = Semaphore(config.max_concurrent)
-        self.rate_limiter = asyncio.Lock()
-        self.last_request_time = 0.0
+        self._limiter = self._build_limiter()
 
         # Track rate limit info from headers
         self.rate_limit_remaining: int | None = None
         self.rate_limit_reset: int | None = None
-        self.adaptive_delay: float = config.rate_limit_delay
+        self.rate_limit_limit: int | None = None
 
-    async def _rate_limit(self):
-        async with self.rate_limiter:
-            now = asyncio.get_event_loop().time()
-            elapsed = now - self.last_request_time
+    def _build_limiter(self) -> Limiter:
+        """Create a pyrate-limiter instance as per SWH rate limits."""
+        hourly_limit = self.config.requests_per_hour
+        return Limiter(Rate(hourly_limit, Duration.HOUR))
 
-            # Use adaptive delay if we're getting close to rate limits
-            delay = self.adaptive_delay
-            if elapsed < delay:
-                await asyncio.sleep(delay - elapsed)
-            self.last_request_time = asyncio.get_event_loop().time()
+    async def _acquire_slot(self) -> None:
+        """Block until the local rate limiter allows another request."""
+        while True:
+            try:
+                self._limiter.try_acquire("swh-api")
+                return
+            except BucketFullException:
+                # Fallback delay: spread hourly allowance across the hour
+                wait_time = max(SECONDS_PER_HOUR / self.config.requests_per_hour, 0.01)
+                logger.debug(f"Local rate limiter sleeping {wait_time:.2f}s")
+                await asyncio.sleep(wait_time)
 
     def _update_rate_limit_info(self, headers: httpx.Headers):
         """Update rate limit info from response headers.
@@ -66,33 +78,23 @@ class SWHContentDownloader:
             self.rate_limit_reset = int(headers["X-RateLimit-Reset"])
 
         if "X-RateLimit-Limit" in headers:
-            limit = int(headers["X-RateLimit-Limit"])
+            self.rate_limit_limit = int(headers["X-RateLimit-Limit"])
 
-            # Adaptive rate limiting: slow down when approaching limit
-            if self.rate_limit_remaining is not None:
-                remaining_ratio = self.rate_limit_remaining / limit
-
-                if remaining_ratio < RATE_LIMIT_CRITICAL_RATIO:
-                    # Increase delay significantly
-                    self.adaptive_delay = (
-                        self.config.rate_limit_delay * RATE_LIMIT_CRITICAL_MULTIPLIER
-                    )
-                    reset_time = (
-                        time.ctime(self.rate_limit_reset) if self.rate_limit_reset else "unknown"
-                    )
-                    logger.warning(
-                        f"Rate limit low: {self.rate_limit_remaining}/{limit} remaining, "
-                        f"resets at {reset_time}, "
-                        f"increasing delay to {self.adaptive_delay:.2f}s"
-                    )
-                elif remaining_ratio < RATE_LIMIT_WARNING_RATIO:
-                    # Increase delay moderately
-                    self.adaptive_delay = (
-                        self.config.rate_limit_delay * RATE_LIMIT_WARNING_MULTIPLIER
-                    )
-                else:
-                    # Reset to normal delay
-                    self.adaptive_delay = self.config.rate_limit_delay
+        if self.rate_limit_limit and self.rate_limit_remaining is not None:
+            remaining_ratio = self.rate_limit_remaining / self.rate_limit_limit
+            if remaining_ratio < RATE_LIMIT_CRITICAL_RATIO:
+                reset_time = (
+                    time.ctime(self.rate_limit_reset) if self.rate_limit_reset else "unknown"
+                )
+                logger.warning(
+                    f"SWH rate limit low: {self.rate_limit_remaining}/"
+                    f"{self.rate_limit_limit} remaining, resets at {reset_time}"
+                )
+            elif remaining_ratio < RATE_LIMIT_WARNING_RATIO:
+                logger.info(
+                    f"SWH rate limit warning: {self.rate_limit_remaining}/"
+                    f"{self.rate_limit_limit} remaining"
+                )
 
     async def download_file(  # noqa: PLR0911
         self,
@@ -133,7 +135,7 @@ class SWHContentDownloader:
             return _make_result(True, file_size, DownloadStatus.SKIPPED, "File already exists")
 
         for attempt in range(self.config.max_retries):
-            await self._rate_limit()
+            await self._acquire_slot()
 
             async with self._semaphore:
                 try:
@@ -233,7 +235,7 @@ class SWHContentDownloader:
         total_files = len(files_list)
         logger.info(f"Starting download of {total_files} files to {output_dir}")
         logger.info(f"Max concurrent downloads: {self.config.max_concurrent}")
-        logger.info(f"Rate limit delay: {self.config.rate_limit_delay}s between requests")
+        logger.info(f"Rate limit rule: {self.config.requests_per_hour}/h (SWH docs)")
         logger.info(f"Skip existing files: {skip_existing}")
 
         limits = httpx.Limits(

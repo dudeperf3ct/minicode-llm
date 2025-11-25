@@ -25,9 +25,10 @@ ray:
 swh_api:
   base_url: "https://archive.softwareheritage.org/api/1"
   max_concurrent: 5 # Reduced from 10 to avoid overwhelming the API
+  # Docs: https://archive.softwareheritage.org/api/#rate-limiting
+  requests_per_hour: 120 # SWH hourly limit (120 anonymous, 1200 authenticated)
   timeout: 30
   max_retries: 5 # Increased retries to handle rate limits better
-  requests_per_second: 5 # Reduced from 20 to be more conservative
 
 # Data Processing Configuration
 processing:

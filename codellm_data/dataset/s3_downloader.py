@@ -50,7 +50,7 @@ class SWHDatasetDownloader:
         logger.info(f"Parallelism: {parallelism}")
 
         DatasetDownloader(
-            local_path=local_path, s3_url=s3_url, prefix=key_name, parallelism=parallelism
+            local_path=local_path, s3_url=f"{s3_url}/{key_name}", parallelism=parallelism
         )
 
         logger.info("Dataset download complete")

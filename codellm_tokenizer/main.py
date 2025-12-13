@@ -2,11 +2,13 @@
 
 from argparse import ArgumentParser
 from pathlib import Path
+from time import perf_counter
 
 import yaml
 from loguru import logger
 from pydantic import ValidationError
 
+from code_tokenizer import CodeTokenizer
 from config import TokenizerConfig
 from eval import TokenizerEvaluator
 from logging_config import setup_logging
@@ -64,23 +66,23 @@ def main() -> None:
     config = load_config(Path(args.config))
     logger.info(f"Configuration: {config}")
 
-    # tokenizer = CodeTokenizer(config)
-    # st = perf_counter()
-    # dataset_iterator = tokenizer.create_dataset_iterator()
-    # logger.info(f"Time taken to setup dataset: {perf_counter() - st} seconds")
+    tokenizer = CodeTokenizer(config)
+    st = perf_counter()
+    dataset_iterator = tokenizer.create_dataset_iterator()
+    logger.info(f"Time taken to setup dataset: {perf_counter() - st} seconds")
 
-    # logger.info("Training a custom tokenizer")
-    # st = perf_counter()
-    # tokenizer.train_tokenizer(dataset_iterator)
-    # logger.info(f"Time taken to train tokenizer: {perf_counter() - st} seconds")
+    logger.info("Training a custom tokenizer")
+    st = perf_counter()
+    tokenizer.train_tokenizer(dataset_iterator)
+    logger.info(f"Time taken to train tokenizer: {perf_counter() - st} seconds")
 
     if args.run_eval:
         tokenizer_path = Path(config.output.output_dir) / "tokenizer.json"
         run_evaluation(tokenizer_path)
 
-    # if config.output.push_to_hf_hub:
-    #     logger.info("Pushing the tokenizer to huggingface hub")
-    #     tokenizer.push_to_huggingface_hub(token=args.hub_token)
+    if config.output.push_to_hf_hub:
+        logger.info("Pushing the tokenizer to huggingface hub")
+        tokenizer.push_to_huggingface_hub(token=args.hub_token)
 
 
 if __name__ == "__main__":

@@ -61,3 +61,10 @@ More examples:
 > Scroll the HTML file to see the entire output.
 
 There is also a small programmatic demo in `example_viz.py`; run `python example_viz.py` to generate a couple of HTML visualisations under `artifacts/examples/`.
+
+![Example visualisation](../assets/example_viz.png)
+
+In token visualisations:
+* Each distinct background colour = one token
+* Adjacent characters with the same colour belong to the same token
+* A colour change means a token boundary

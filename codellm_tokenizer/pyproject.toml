@@ -5,7 +5,13 @@ description = "Train a tokenizer on swallcode pretrained dataset."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "datasets>=4.4.1",
     "tokenizers>=0.22.1",
+    "loguru>=0.7.0",
+    "numpy>=2.0.0",
+    "pyyaml>=6.0.0",
+    "pydantic>=2.7.0",
+    "huggingface-hub>=0.22.0",
 ]
 
 [dependency-groups]

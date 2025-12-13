@@ -203,3 +203,4 @@ __marimo__/
 
 # Datasets and logs
 data
+codellm_tokenizer/artifacts

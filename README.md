@@ -1,10 +1,13 @@
 # Mini CodeLLM
 
-Ambitious project to create a minimalistic version of [StarCoder v2](https://arxiv.org/abs/2402.19173) - Python specialised - for educational purposes.
+Write-up:
+- https://dudeperf3ct.github.io/projects/train_llm_part0/ (data)
+- https://dudeperf3ct.github.io/projects/train_llm_part1/ (tokenizer)
 
 ## Getting Started
 
 - [`codellm_data`](./codellm_data/README.md): Parses and download datasets.
+- [`codellm_tokenizer`](./codellm_tokenizer/README.md): Train a custom byte-level BPE tokenizer using subset of [`tokyotech-llm/swallow-code-v2`](https://huggingface.co/datasets/tokyotech-llm/swallow-code-v2) dataset
 
 ## License
 

@@ -1,0 +1,20 @@
+dataset:
+  hf_path: "tokyotech-llm/swallow-code-v2"
+  subset: "swallowcode-v2"
+  split: "train"
+  text_field: "improved_code"
+  streaming: true
+  shuffle: true
+  shuffle_buffer: 10000
+  seed: 42
+  max_samples: 1_000_000 # number of samples to use for training
+
+training:
+  vocab_size: 32_768
+  min_frequency: 5
+
+output:
+  output_dir: "artefacts"
+  hub_repo_id: dudeperf3ct/codellm-tokenizer
+  hub_private: false
+  push_to_hf_hub: true

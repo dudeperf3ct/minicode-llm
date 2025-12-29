@@ -1,14 +1,16 @@
 # template/pyproject.toml.jinja
 [project]
-name = "codellm_pretrain"
+name = "codellm_pretrain_nemo"
 version = "0.1.0"
-description = "Pretraining an LLM"
+description = "Pretraining an LLM using NeMO framework"
 readme = "README.md"
 requires-python = ">=3.12"
 authors = [
     { name = "dudeperf3ct" }
 ]
-dependencies = []
+dependencies = [
+
+]
 
 [dependency-groups]
 dev = [
@@ -17,8 +19,8 @@ dev = [
     "pre-commit>=3.5.0",
 ]
 
-# ruff configuration
 
+# ruff configuration
 [tool.ruff]
 target-version = "py312"
 line-length = 100

@@ -73,3 +73,4 @@ project-includes = ["."]
 search-path = ["."]
 python-interpreter-path = ".venv/bin/python3"
 site-package-path = [".venv/lib/python3.12/site-packages"]
+disable-search-path-heuristics = true

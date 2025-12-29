@@ -12,23 +12,33 @@ Dataset: [`tokyotech-llm/swallow-code-v2`](https://huggingface.co/datasets/tokyo
 
 I am using Lambda Labs GPU instance with 1xH100 GPU (80 GB SMX5) for debugging.
 
-Once instance is up, install the required libraries:
+Once instance is up, install the PyTorch nightly build with CUDA 12.8 support in a new virtual environment:
 
 ```bash
-uv sync
+uv venv
+source .venv/bin/activate
+uv pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128 --force-reinstall
+uv pip install transformers tokenizers
 ```
 
-Clone the `torchtitan` repository.
+Clone the `torchtitan` repository and install the project dependencies.
 
 ```bash
-git clone https://github.com/pytorch/torchtitan.git
+git clone https://github.com/pytorch/torchtitan
 cd torchtitan
+uv pip install -r pyproject.toml
 ```
 
-Move the training configuration files to torchtitan's directory.
+Make a copy of the training configuration files to torchtitan's directory.
 
 ```bash
-mv ../train_configs ./
+cp -r ../train_configs ./train_configs
+```
+
+Create a [access token](https://huggingface.co/docs/hub/en/security-tokens) in Hugging Face and login using the `huggingface-cli` tool.
+
+```bash
+hf auth login
 ```
 
 ### Memory Estimation
@@ -39,7 +49,7 @@ Next, estimate the memory requirements for the [Llama 3.2 1B](https://huggingfac
 > Llama 3.2 1B is a gated model and requires access. Log in to Hugging Face and request access to the model.
 
 ```bash
-NGPU=1 CONFIG_FILE='./train_configs/debug_llama32_1b.toml'
+NGPU=1 CONFIG_FILE='./train_configs/debug_llama32_1b.toml' ./scripts/estimate/run_memory_estimation.sh
 ```
 
 ### Communication Mode for debugging
@@ -55,5 +65,7 @@ NGPU=8 COMM_MODE='fake_backend' CONFIG_FILE='./train_configs/debug_llama32_1b.to
 - `local_tensor`: Simulates the full distributed training workflow on a single GPU by executing all communication and computation locally
 
 ```bash
-NGPU=8 COMM_MODE='local_tensor' CONFIG_FILE='./train_configs/debug_llama32 ./run_train.sh
+NGPU=16 COMM_MODE="local_tensor" ./run_train.sh \
+  --parallelism.tensor_parallel_degree 8 \
+  --parallelism.data_parallel_shard_degree 2
 ```

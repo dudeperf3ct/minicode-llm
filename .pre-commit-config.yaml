@@ -22,6 +22,8 @@ repos:
     rev: v1.38.1
     hooks:
       - id: typos
+        pass_filenames: true
+        exclude: \\.toml$
 
   - repo: https://github.com/facebook/pyrefly-pre-commit
     rev: 0.0.1

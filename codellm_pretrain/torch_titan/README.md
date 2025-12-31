@@ -29,7 +29,7 @@ cd torchtitan
 uv pip install -r pyproject.toml
 ```
 
-Make a copy of the training configuration files to torchtitan's directory.
+Make a copy of the training configuration files and local overrides to torchtitan's directory.
 
 ```bash
 cp -r ../train_configs ./train_configs
@@ -68,4 +68,40 @@ NGPU=8 COMM_MODE='fake_backend' CONFIG_FILE='./train_configs/debug_llama32_1b.to
 NGPU=16 COMM_MODE="local_tensor" ./run_train.sh \
   --parallelism.tensor_parallel_degree 8 \
   --parallelism.data_parallel_shard_degree 2
+```
+
+## Custom dataset + tokenizer (SwallowCode + 32k)
+
+
+Make a copy of the training configuration files and local overrides to torchtitan's directory.
+
+```bash
+cp -r ../train_configs ./train_configs
+cp ../custom_spec.py ./torchtitan/custom_spec.py
+cp ../dataset/text_datasets.py ./torchtitan/hf_datasets/text_datasets.py
+```
+
+This setup uses:
+- SwallowCode v2 dataset (with FIM formatting) wired into `torchtitan/hf_datasets/text_datasets.py`.
+- A custom 32k tokenizer loaded from a local HF snapshot.
+- A custom train spec (`custom_spec.py`) that overrides vocab size to 32,768.
+
+Download the tokenizer assets from the Hub into the location referenced by the config:
+
+```bash
+python - <<'PY'
+from huggingface_hub import snapshot_download
+
+snapshot_download(
+    repo_id="dudeperf3ct/codellm-tokenizer",
+    local_dir="hf_assets/codellm-tokenizer",
+    local_dir_use_symlinks=False,
+)
+PY
+```
+
+Run training with the custom config:
+
+```bash
+NGPU=1 CONFIG_FILE='./train_configs/llama32_1b_swallowcode_tok32k.toml' ./run_train.sh
 ```

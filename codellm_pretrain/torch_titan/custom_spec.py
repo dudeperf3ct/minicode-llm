@@ -13,7 +13,22 @@ VOCAB_SIZE = 32768
 
 
 def _vocab_only_args(vocab_size: int) -> TitanDenseModelArgs:
-    return TitanDenseModelArgs(vocab_size=vocab_size)
+    # Let HF config define core shape params; only override vocab size (and MLP width).
+    args = TitanDenseModelArgs()
+    for attr in (
+        "dim",
+        "n_layers",
+        "n_heads",
+        "n_kv_heads",
+        "norm_eps",
+        "rope_theta",
+        "max_seq_len",
+    ):
+        setattr(args, attr, None)
+    args.vocab_size = vocab_size
+    # Llama 3.2 1B uses intermediate_size=4*hidden_size; this matches via 1.5x on 2/3*4.
+    args.ffn_dim_multiplier = 1.5
+    return args
 
 
 base_spec = base_backend.get_train_spec()
@@ -38,3 +53,51 @@ custom_spec = TrainSpec(
 )
 
 register_train_spec(TRAIN_SPEC_NAME, custom_spec)
+
+
+"""
+>>> cfg = AutoConfig.from_pretrained("meta-llama/Llama-3.2-1B", trust_remote_code=True)
+>>> print(cfg)
+LlamaConfig {
+  "architectures": [
+    "LlamaForCausalLM"
+  ],
+  "attention_bias": false,
+  "attention_dropout": 0.0,
+  "bos_token_id": 128000,
+  "dtype": "bfloat16",
+  "eos_token_id": 128001,
+  "head_dim": 64,
+  "hidden_act": "silu",
+  "hidden_size": 2048,
+  "initializer_range": 0.02,
+  "intermediate_size": 8192,
+  "max_position_embeddings": 131072,
+  "mlp_bias": false,
+  "model_type": "llama",
+  "num_attention_heads": 32,
+  "num_hidden_layers": 16,
+  "num_key_value_heads": 8,
+  "pretraining_tp": 1,
+  "rms_norm_eps": 1e-05,
+  "rope_scaling": {
+    "factor": 32.0,
+    "high_freq_factor": 4.0,
+    "low_freq_factor": 1.0,
+    "original_max_position_embeddings": 8192,
+    "rope_type": "llama3"
+  },
+  "rope_theta": 500000.0,
+  "tie_word_embeddings": true,
+  "transformers_version": "4.57.3",
+  "use_cache": true,
+  "vocab_size": 128256
+}
+
+>>> print("hidden_size", cfg.hidden_size)
+hidden_size 2048
+>>> print("num_hidden_layers", cfg.num_hidden_layers)
+num_hidden_layers 16
+>>> print("num_attention_heads", cfg.num_attention_heads)
+num_attention_heads 32
+"""

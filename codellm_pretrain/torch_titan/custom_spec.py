@@ -2,13 +2,13 @@
 
 from types import SimpleNamespace
 
-from torchtitan.experiments import transformers_modelling_backend as base_backend
-from torchtitan.experiments.transformers_modelling_backend.model.args import (
+import torchtitan.experiments.transformers_modeling_backend as base_backend
+from torchtitan.experiments.transformers_modeling_backend.model.args import (
     HFTransformerModelArgs,
 )
 from torchtitan.protocols.train_spec import TrainSpec, register_train_spec
 
-TRAIN_SPEC_NAME = "transformers_modelling_backend_custom"
+TRAIN_SPEC_NAME = "transformers_modeling_backend_custom"
 FLAVOUR_NAME = "llama32_1b_tok32k"
 VOCAB_SIZE = 32768
 

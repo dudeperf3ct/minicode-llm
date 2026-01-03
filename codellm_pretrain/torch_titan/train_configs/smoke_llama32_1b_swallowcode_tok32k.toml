@@ -30,7 +30,7 @@ enable_wandb = true
 # Model config:
 [model]
 name = "transformers_modeling_backend_custom"
-flavour = "llama32_1b_tok32k"
+flavor = "llama32_1b_tok32k"
 hf_assets_path = "./hf_assets/codellm-tokenizer"
 # Note: tokenizer loaded from hf_assets_path via HuggingFaceTokenizer
 # This feature requires torchao. It swaps `torch.nn.Linear` with `Float8Linear for example.

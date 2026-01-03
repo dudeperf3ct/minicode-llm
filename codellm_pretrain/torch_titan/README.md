@@ -18,7 +18,7 @@ Once instance is up, install the PyTorch nightly build with CUDA 12.8 support in
 uv venv
 source .venv/bin/activate
 uv pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu128 --force-reinstall
-uv pip install transformers tokenizers
+uv pip install transformers tokenizers datasets huggingface_hub wandb
 ```
 
 Clone the `torchtitan` repository and install the project dependencies.
@@ -27,6 +27,7 @@ Clone the `torchtitan` repository and install the project dependencies.
 git clone https://github.com/pytorch/torchtitan
 cd torchtitan
 uv pip install -r pyproject.toml
+uv pip install -e .
 ```
 
 Make a copy of the training configuration files and local overrides to torchtitan's directory.
@@ -103,5 +104,5 @@ PY
 Run training with the custom config as smoke test:
 
 ```bash
-NGPU=1 CONFIG_FILE='./train_configs/smoke_llama32_1b_swallowcode_tok32k' ./run_train.sh
+NGPU=4 CONFIG_FILE='./train_configs/smoke_llama32_1b_swallowcode_tok32k.toml' ./run_train.sh
 ```

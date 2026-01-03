@@ -72,7 +72,6 @@ NGPU=16 COMM_MODE="local_tensor" ./run_train.sh \
 
 ## Custom dataset + tokenizer (SwallowCode + 32k)
 
-
 Make a copy of the training configuration files and local overrides to torchtitan's directory.
 
 ```bash
@@ -85,6 +84,7 @@ This setup uses:
 - SwallowCode v2 dataset (with FIM formatting) wired into `torchtitan/hf_datasets/text_datasets.py`.
 - A custom 32k tokenizer loaded from a local HF snapshot.
 - A custom train spec (`custom_spec.py`) that overrides vocab size to 32,768.
+- Llama 3.2 1B model architecture with custom tokenizer and dataset.
 
 Download the tokenizer assets from the Hub into the location referenced by the config:
 
@@ -100,8 +100,8 @@ snapshot_download(
 PY
 ```
 
-Run training with the custom config:
+Run training with the custom config as smoke test:
 
 ```bash
-NGPU=1 CONFIG_FILE='./train_configs/llama32_1b_swallowcode_tok32k.toml' ./run_train.sh
+NGPU=1 CONFIG_FILE='./train_configs/smoke_llama32_1b_swallowcode_tok32k' ./run_train.sh
 ```

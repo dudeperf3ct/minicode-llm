@@ -1,10 +1,9 @@
 # Custom TorchTitan train spec for overriding tokenizer vocab size.
 
-from types import SimpleNamespace
-
 import torchtitan.experiments.transformers_modeling_backend as base_backend
 from torchtitan.experiments.transformers_modeling_backend.model.args import (
     HFTransformerModelArgs,
+    TitanDenseModelArgs,
 )
 from torchtitan.protocols.train_spec import TrainSpec, register_train_spec
 
@@ -13,8 +12,8 @@ FLAVOUR_NAME = "llama32_1b_tok32k"
 VOCAB_SIZE = 32768
 
 
-def _vocab_only_args(vocab_size: int) -> SimpleNamespace:
-    return SimpleNamespace(vocab_size=vocab_size)
+def _vocab_only_args(vocab_size: int) -> TitanDenseModelArgs:
+    return TitanDenseModelArgs(vocab_size=vocab_size)
 
 
 base_spec = base_backend.get_train_spec()

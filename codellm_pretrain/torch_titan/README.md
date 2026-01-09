@@ -117,10 +117,11 @@ PY
 
 ## Smoke Test
 
-I used 2 x H100 GPUs (80 GB SMX5) for smoke testing. It takes about $8 to run this smoke testing. It logs the run to wandb.
+> [!WARNING]
+> I used 2 x H100 GPUs (80 GB SMX5) for smoke testing. It takes about **$8** to run this smoke testing. It logs the run to wandb.
 
 >[!IMPORTANT]
-> Change `data_parallel_replicate_degree` to number of GPUs used for training from `1` in the config file.
+> Change `data_parallel_replicate_degree` to number of GPUs used for training.
 
 Run training with the custom config as smoke test:
 
@@ -139,7 +140,7 @@ Smoke test notes (2x H100, 1k steps):
 ## Full Training
 
 >[!WARNING]
-> I ran the following on 4 x H100 which costs $12.36/hr. It will cost about $150 for running this setup.
+> I ran the following on 4 x H100 which costs $12.36/hr. It will cost about **$150** for running this setup.
 
 For a full run on 4 x H100 GPUs (80 GB SMX5):
 
@@ -150,12 +151,12 @@ For a full run on 4 x H100 GPUs (80 GB SMX5):
 NGPU=4 CONFIG_FILE='./train_configs/full_llama32_1b_swallowcode_tok32k.toml' ./run_train.sh
 ```
 
-Insights for full training from smoke testing (example for 4x H100):
+Insights for full training from smoke testing (for 4x H100):
 - `tokens = steps * global_batch_size * seq_len`
 - With `local_batch_size=6`, `NGPU=4`, `seq_len=8192`: `global_batch_size=24`
-- With `steps=40000`: `tokens ~ 24 * 8192 * 40000 ~ 7.86B`
+- With `steps=50000`: `tokens ~ 24 * 8192 * 50000 ~ 9.83B`
 - Using smoke-test throughput (~55k tokens/sec/GPU on 2x H100), estimate step time as `(global_batch_size * seq_len) / (tps_per_gpu * NGPU)` -> ~0.9s/step on 4 GPUs
-- That puts 40k steps at ~10 hours (~$124 at $12.36/hr)
+- That puts 50k steps at ~ 12.5 hours (~$144 at $12.36/hr)
 - Compute-optimal for a 1B model is ~20B tokens (Chinchilla), so this run is still undertrained
 
 ## Evaluation

@@ -6,7 +6,7 @@ Write-up:
 
 ## Getting Started
 
-- [`codellm_data`](./codellm_data/README.md): Parses and download datasets.
+- [`codellm_data`](./codellm_data/README.md): Parses and downloads datasets.
 - [`codellm_tokenizer`](./codellm_tokenizer/README.md): Train a custom byte-level BPE tokenizer using subset of [`tokyotech-llm/swallow-code-v2`](https://huggingface.co/datasets/tokyotech-llm/swallow-code-v2) dataset
 
 ## License

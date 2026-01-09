@@ -9,9 +9,18 @@ authors = [
     { name = "dudeperf3ct" }
 ]
 dependencies = [
+    "transformers>=4.57.1",
+]
+
+[project.optional-dependencies]
+# Select one of these extras depending on your machine.
+cpu = [
     "torch",
     "torchtitan",
-    "transformers>=4.57.1"
+]
+cuda = [
+    "torch",
+    "torchtitan",
 ]
 
 [dependency-groups]
@@ -22,12 +31,19 @@ dev = [
 ]
 
 [tool.uv.sources]
-torch = [{ index = "pytorch-nightly-cu128", marker ="sys_platform == 'linux'" }]
-torchtitan = [{ index = "pytorch-nightly-cu128", marker ="sys_platform == 'linux'"}]
+torch = [
+    { index = "pytorch-cu121", marker = "extra == 'cuda' and sys_platform == 'linux'" },
+    { index = "pytorch-cpu", marker = "extra == 'cpu' and extra != 'cuda'" },
+]
 
 [[tool.uv.index]]
-name = "pytorch-nightly-cu128"
-url = "https://download.pytorch.org/whl/nightly/cu128"
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 # ruff configuration
@@ -93,9 +109,6 @@ exclude_lines = [
 # typos configuration
 [tool.typos.files]
 extend-exclude = [".gitignore", "LICENSE"]
-
-[tool.typos.default]
-locale = "en-gb"
 
 # pyrefly configuration
 [tool.pyrefly]

@@ -4,7 +4,8 @@ Write up:
 
 Training an LLM from scratch using the custom tokenizer and dataset prepared in previous steps.
 
-Custom tokeinzer: https://dudeperf3ct.github.io/projects/train_llm_part1/
+Custom tokenizer: https://dudeperf3ct.github.io/projects/train_llm_part1/
+
 Dataset: [`tokyotech-llm/swallow-code-v2`](https://huggingface.co/datasets/tokyotech-llm/swallow-code-v2)
 
 
@@ -34,10 +35,16 @@ Make a copy of the training configuration files and local overrides to torchtita
 cp -r ../train_configs ./train_configs
 ```
 
-Create a [access token](https://huggingface.co/docs/hub/en/security-tokens) in Hugging Face and login using the `huggingface-cli` tool.
+Create [access token](https://huggingface.co/docs/hub/en/security-tokens) in Hugging Face and login using the `huggingface-cli` tool.
 
 ```bash
 hf auth login
+```
+
+Similarly, set wandb API token using `wandb` CLI using following command.
+
+```bash
+wandb login
 ```
 
 ## Debugging
@@ -112,6 +119,9 @@ PY
 
 I used 2 x H100 GPUs (80 GB SMX5) for smoke testing. It takes about $8 to run this smoke testing. It logs the run to wandb.
 
+>[!IMPORTANT]
+> Change `data_parallel_replicate_degree` to number of GPUs used for training from `1` in the config file.
+
 Run training with the custom config as smoke test:
 
 ```bash
@@ -120,10 +130,65 @@ NGPU=2 CONFIG_FILE='./train_configs/smoke_llama32_1b_swallowcode_tok32k.toml' ./
 
 This runs for 1000 steps. It takes about 15 minutes to complete.
 
+Smoke test notes (2x H100, 1k steps):
+- Loss dropped from ~10.9 to ~4.7; outputs will still look noisy/gibberish at this stage.
+- Throughput stabilized around ~55k tokens/sec with ~41% MFU.
+- Warmup covered the full run (1k warmup steps), so the LR never decayed.
+- Token budget: `steps * global_batch_size * seq_len`. With `local_batch_size=6`, `NGPU=2`, `global_batch_size=12`, `seq_len=8192` -> ~98M tokens.
+
 ## Full Training
 
-For full training, I used 8 x H100 GPUs (80 GB SMX5). Run training with the custom config:
+>[!WARNING]
+> I ran the following on 4 x H100 which costs $12.36/hr. It will cost about $150 for running this setup.
+
+For a full run on 4 x H100 GPUs (80 GB SMX5):
+
+>[!IMPORTANT]
+> `data_parallel_replicate_degree` is set to 4 in the config. Change it if you use a different GPU count.
 
 ```bash
-NGPU=8 CONFIG_FILE='./train_configs/full_llama32_1b_swallowcode_tok32k.toml' ./run_train.sh
+NGPU=4 CONFIG_FILE='./train_configs/full_llama32_1b_swallowcode_tok32k.toml' ./run_train.sh
+```
+
+Insights for full training from smoke testing (example for 4x H100):
+- `tokens = steps * global_batch_size * seq_len`
+- With `local_batch_size=6`, `NGPU=4`, `seq_len=8192`: `global_batch_size=24`
+- With `steps=40000`: `tokens ~ 24 * 8192 * 40000 ~ 7.86B`
+- Using smoke-test throughput (~55k tokens/sec/GPU on 2x H100), estimate step time as `(global_batch_size * seq_len) / (tps_per_gpu * NGPU)` -> ~0.9s/step on 4 GPUs
+- That puts 40k steps at ~10 hours (~$124 at $12.36/hr)
+- Compute-optimal for a 1B model is ~20B tokens (Chinchilla), so this run is still undertrained
+
+## Evaluation
+
+Setup the environment by running `uv sync --extra cpu` or `uv sync --extra cuda` command for CPU and GPU system. Make sure DCP checkpoint are stored under `checkpoint` folder.
+
+Use `eval/eval_generate.py` to run inference against a DCP checkpoint. Provide the same config used for training and a checkpoint directory. It uses examples collected in [`eval/eval_samples.jsonl`](./eval/eval_samples.jsonl) file for evaluation. Run from this directory so relative paths resolve.
+
+```bash
+python eval/eval_generate.py \
+  --config ./train_configs/smoke_llama32_1b_swallowcode_tok32k.toml \
+  --checkpoint ./checkpoint/<step_dir> \
+  --samples ./eval/eval_samples.jsonl \
+  --max_new_tokens 64 \
+  --temperature 0.8 \
+  --top_k 50 \
+  --stop_at_eos
+```
+
+- `eval/eval_samples.jsonl` accepts `{name, prompt}` or FIM fields `{fim_prefix, fim_suffix, fim_format}`.
+- Use `--prompt` for a single prompt, or add `--out` to print JSON.
+- `hf_assets/` stores the local tokenizer snapshot referenced by `hf_assets_path` in the config; it is required for eval with the current configs
+
+Single-prompt example:
+
+```bash
+python eval/eval_generate.py \
+  --config ./train_configs/smoke_llama32_1b_swallowcode_tok32k.toml \
+  --checkpoint ./checkpoint/<step_dir> \
+  --prompt "def sum(a, b):" \
+  --max_new_tokens 64 \
+  --temperature 0.8 \
+  --top_k 50 \
+  --stop_at_eos \
+  --custom_import custom_spec
 ```

@@ -8,9 +8,7 @@ Custom tokeinzer: https://dudeperf3ct.github.io/projects/train_llm_part1/
 Dataset: [`tokyotech-llm/swallow-code-v2`](https://huggingface.co/datasets/tokyotech-llm/swallow-code-v2)
 
 
-## Setup
-
-I am using Lambda Labs GPU instance with 1xH100 GPU (80 GB SMX5) for debugging.
+## Dependencies Setup
 
 Once instance is up, install the PyTorch nightly build with CUDA 12.8 support in a new virtual environment:
 
@@ -42,6 +40,10 @@ Create a [access token](https://huggingface.co/docs/hub/en/security-tokens) in H
 hf auth login
 ```
 
+## Debugging
+
+I am using Lambda Labs GPU instance with 1xH100 GPU (80 GB SMX5) for debugging. It costs about $2 to run these.
+
 ### Memory Estimation
 
 Next, estimate the memory requirements for the [Llama 3.2 1B](https://huggingface.co/meta-llama/Llama-3.2-1B) model
@@ -71,7 +73,12 @@ NGPU=16 COMM_MODE="local_tensor" ./run_train.sh \
   --parallelism.data_parallel_shard_degree 2
 ```
 
-## Custom dataset + tokenizer (SwallowCode + 32k)
+>[!NOTE]
+> The `local_tensor` mode did not work for me on a single H100 GPU instance.
+
+### Custom dataset + tokenizer (SwallowCode + 32k)
+
+## Setup
 
 Make a copy of the training configuration files and local overrides to torchtitan's directory.
 
@@ -101,8 +108,22 @@ snapshot_download(
 PY
 ```
 
+## Smoke Test
+
+I used 2 x H100 GPUs (80 GB SMX5) for smoke testing. It takes about $8 to run this smoke testing. It logs the run to wandb.
+
 Run training with the custom config as smoke test:
 
 ```bash
-NGPU=4 CONFIG_FILE='./train_configs/smoke_llama32_1b_swallowcode_tok32k.toml' ./run_train.sh
+NGPU=2 CONFIG_FILE='./train_configs/smoke_llama32_1b_swallowcode_tok32k.toml' ./run_train.sh
+```
+
+This runs for 1000 steps. It takes about 15 minutes to complete.
+
+## Full Training
+
+For full training, I used 8 x H100 GPUs (80 GB SMX5). Run training with the custom config:
+
+```bash
+NGPU=8 CONFIG_FILE='./train_configs/full_llama32_1b_swallowcode_tok32k.toml' ./run_train.sh
 ```

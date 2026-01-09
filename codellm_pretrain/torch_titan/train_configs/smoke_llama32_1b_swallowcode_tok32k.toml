@@ -14,13 +14,13 @@ custom_import = "torchtitan.custom_spec"
 [profiling]
 enable_profiling = true
 save_traces_folder = "profile_trace"
-profile_freq = 5
+profile_freq = 400
 enable_memory_snapshot = true
 save_memory_snapshot_folder = "memory_snapshot"
 
 # Metrics config: https://github.com/pytorch/torchtitan/blob/81af8833ddeff9b5f1874dc7e20594aa17da6b86/torchtitan/config/job_config.py#L74
 [metrics]
-log_freq = 1
+log_freq = 100
 disable_color_printing = false
 enable_tensorboard = false
 save_tb_folder = "tb"
@@ -66,11 +66,11 @@ prefetch_factor = 2
 # Training config: https://github.com/pytorch/torchtitan/blob/81af8833ddeff9b5f1874dc7e20594aa17da6b86/torchtitan/config/job_config.py#L235
 [training]
 local_batch_size = 8
-seq_len = 4096
+seq_len = 8192
 max_norm = 1.0  # grad norm clipping
 # global_batch_size defaults to local_batch_size * data_parallel_degree.
 # If training.global_batch_size is set, TorchTitan derives gradient accumulation steps.
-steps = 10
+steps = 1000
 dataset = "swallowcode"
 dtype = "bfloat16"
 mixed_precision_param = "bfloat16" # only works if when data_parallel_shard_degree > 1 or context_parallel_degree > 1
@@ -95,7 +95,7 @@ export_dtype = "float32"
 async_mode = "disabled"  # ["disabled", "async", "async_with_pinned_mem"]
 
 [activation_checkpoint]
-mode = "selective"  # ["none", "selective", "full"]
+mode = "none"  # ["none", "selective", "full"]
 selective_ac_option = '2'  # 'int' = ac every positive int layer or 'op', ac based on ops policy
 
 [compile]

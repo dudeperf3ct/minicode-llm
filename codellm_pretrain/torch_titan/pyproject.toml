@@ -2,9 +2,9 @@
 [project]
 name = "codellm_pretrain_torchtitan"
 version = "0.1.0"
-description = "Pretraining an LLM using TorchTitan library"
+description = "Pretraining LLM using torchtitan library"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12, <3.13"
 authors = [
     { name = "dudeperf3ct" }
 ]
@@ -32,18 +32,18 @@ dev = [
 
 [tool.uv.sources]
 torch = [
-    { index = "pytorch-cu121", marker = "extra == 'cuda' and sys_platform == 'linux'" },
-    { index = "pytorch-cpu", marker = "extra == 'cpu' and extra != 'cuda'" },
+    { index = "pytorch-nightly-cu128", marker = "extra == 'cuda' and sys_platform == 'linux'" },
+    { index = "pytorch-nightly-cpu", marker = "extra == 'cpu' and extra != 'cuda'" },
 ]
 
 [[tool.uv.index]]
-name = "pytorch-cu121"
-url = "https://download.pytorch.org/whl/cu121"
+name = "pytorch-nightly-cu128"
+url = "https://download.pytorch.org/whl/nightly/cu128"
 explicit = true
 
 [[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
+name = "pytorch-nightly-cpu"
+url = "https://download.pytorch.org/whl/nightly/cpu"
 explicit = true
 
 # ruff configuration

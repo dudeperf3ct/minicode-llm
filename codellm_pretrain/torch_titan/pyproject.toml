@@ -1,23 +1,39 @@
+# template/pyproject.toml.jinja
 [project]
-name = "codellm-tokenizer"
+name = "codellm_pretrain_torchtitan"
 version = "0.1.0"
-description = "Train a tokenizer on swallcode pretrained dataset."
+description = "Pretraining LLM using torchtitan library"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12, <3.13"
+authors = [
+    { name = "dudeperf3ct" }
+]
 dependencies = [
-    "datasets>=4.4.1",
-    "tokenizers>=0.22.1",
-    "loguru>=0.7.0",
-    "numpy>=2.0.0",
-    "pyyaml>=6.0.0",
-    "pydantic>=2.7.0",
-    "huggingface-hub>=0.22.0",
+    "transformers>=4.57.1",
+]
+
+[project.optional-dependencies]
+cuda = [
+    "torch>=2.10.0.dev0",
+    "torchtitan",
 ]
 
 [dependency-groups]
 dev = [
-    "pre-commit>=4.5.0",
+    "pytest>=8.0.0",
+    "pytest-cov>=4.1.0",
+    "pre-commit>=3.5.0",
 ]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-nightly-cu128", marker = "extra == 'cuda' and sys_platform == 'linux'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-nightly-cu128"
+url = "https://download.pytorch.org/whl/nightly/cu128"
+explicit = true
 
 # ruff configuration
 [tool.ruff]
@@ -30,7 +46,6 @@ select = [
     "W",      # pycodestyle warnings
     "F",      # pyflakes
     "I",      # isort
-    "D",      # pydocstyle
     "N",      # pep8-naming
     "UP",     # pyupgrade
     "B",      # flake8-bugbear
@@ -47,7 +62,6 @@ select = [
 "tests/**/*.py" = [
     "ARG",     # unused arguments ok in tests
     "PLR2004", # magic values ok in tests
-    "D",       # Don't enforce documentation rule
 ]
 
 [tool.ruff.format]
@@ -55,15 +69,35 @@ quote-style = "double"
 indent-style = "space"
 line-ending = "auto"
 
-[tool.ruff.lint.pydocstyle]
-convention = "google"
+# pytest configuration
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+]
+
+# pytest coverage configuration
+[tool.coverage.run]
+source = ["codellm_pretrain"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
 
 # typos configuration
 [tool.typos.files]
 extend-exclude = [".gitignore", "LICENSE"]
-
-[tool.typos.default]
-locale = "en-gb"
 
 # pyrefly configuration
 [tool.pyrefly]

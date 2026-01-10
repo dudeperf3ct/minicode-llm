@@ -7,6 +7,7 @@ import argparse
 import importlib
 import json
 import os
+import re
 import sys
 import time
 from collections.abc import Iterable
@@ -149,35 +150,72 @@ def clean_byte_level_text(text: str) -> str:
     return text.replace("\u0120", " ").replace("\u010a", "\n")
 
 
+def normalize_display_text(text: str) -> str:
+    """Make decoded text readable while preserving indentation."""
+    text = clean_byte_level_text(text)
+    normalized_lines = []
+    for line in text.splitlines():
+        match = re.match(r"[ \t]*", line)
+        lead = match.group(0) if match else ""
+        rest = line[len(lead) :]
+        rest = re.sub(r" {2,}", " ", rest).rstrip()
+        normalized_lines.append(lead + rest)
+    return "\n".join(normalized_lines)
+
+
+def interpret_escapes(text: str | None) -> str | None:
+    if text is None:
+        return None
+    return text.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r")
+
+
+def decode_tokens(tokenizer, tokens: list[int], *, skip_special_tokens: bool) -> str:
+    try:
+        return tokenizer.decode(tokens, skip_special_tokens=skip_special_tokens)
+    except TypeError:
+        return tokenizer.decode(tokens)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run inference from a TorchTitan DCP checkpoint.")
     parser.add_argument("--config", type=str, required=True, help="TOML config file path")
     parser.add_argument("--checkpoint", type=str, required=True, help="Checkpoint directory")
-    parser.add_argument("--prompt", type=str, default="", help="Input prompt")
+    parser.add_argument("--prompt", type=str, default="", help="LM prompt (no FIM tokens)")
     parser.add_argument(
         "--samples",
         type=str,
         default=None,
-        help="Optional JSONL with prompts/FIM fields",
+        help="Optional JSONL with prompt or FIM fields",
     )
-
+    # FIM related args
     parser.add_argument(
         "--fim_prefix",
         type=str,
         default=None,
-        help="FIM prefix text (enables FIM if set)",
+        help="FIM prefix text (required unless suffix-only prompt)",
     )
     parser.add_argument(
         "--fim_suffix",
         type=str,
-        default="<|fim_suffix|>",
-        help="FIM suffix text (enables FIM if set)",
+        default=None,
+        help="FIM suffix text (required unless prefix-only prompt)",
     )
     parser.add_argument(
         "--fim_format",
         choices=["psm", "spm"],
         default="psm",
         help="FIM ordering (default: psm)",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=["auto", "fim", "lm"],
+        default="auto",
+        help="Prompt mode: auto (infer), fim (infilling), or lm (standard completion)",
+    )
+    parser.add_argument(
+        "--no_interpret_escapes",
+        action="store_true",
+        help="Do not interpret \\n/\\t/\\r in --prompt/--fim_prefix/--fim_suffix",
     )
 
     parser.add_argument(
@@ -235,6 +273,12 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="Print JSON report to stdout",
     )
+    parser.add_argument(
+        "--show_raw",
+        action="store_true",
+        default=False,
+        help="Print raw decoded text alongside the pretty output",
+    )
     return parser.parse_args()
 
 
@@ -253,8 +297,19 @@ def main() -> None:
     if args.custom_import:
         importlib.import_module(args.custom_import)
 
-    if args.samples is None and not args.prompt and args.fim_prefix is None:
-        raise SystemExit("Provide --prompt or --samples or --fim_prefix/--fim_suffix.")
+    if (
+        args.samples is None
+        and not args.prompt
+        and args.fim_prefix is None
+        and args.fim_suffix is None
+    ):
+        raise SystemExit("Provide --samples or --prompt or --fim_prefix/--fim_suffix.")
+    if (
+        args.mode == "auto"
+        and args.prompt
+        and (args.fim_prefix is not None or args.fim_suffix is not None)
+    ):
+        raise SystemExit("Auto mode cannot mix --prompt with --fim_prefix/--fim_suffix.")
 
     device_str = args.device
     if device_str == "cuda" and not torch.cuda.is_available():
@@ -300,29 +355,57 @@ def main() -> None:
 
     stop_token_id = resolve_stop_token_id(tokenizer, args.stop_at_eos)
 
+    prompt_cli = args.prompt
+    fim_prefix_cli = args.fim_prefix
+    fim_suffix_cli = args.fim_suffix
+    if not args.no_interpret_escapes:
+        prompt_cli = interpret_escapes(prompt_cli)
+        fim_prefix_cli = interpret_escapes(fim_prefix_cli)
+        fim_suffix_cli = interpret_escapes(fim_suffix_cli)
+
     samples = []
     if args.samples:
         samples.extend(load_samples(Path(args.samples)))
+    elif args.mode == "lm" or (args.mode == "auto" and prompt_cli):
+        samples.append({"name": "prompt", "prompt": prompt_cli})
     else:
         samples.append(
             {
-                "name": "prompt",
-                "prompt": args.prompt,
-                "fim_prefix": args.fim_prefix,
-                "fim_suffix": args.fim_suffix,
+                "name": "fim_prompt",
+                "fim_prefix": fim_prefix_cli,
+                "fim_suffix": fim_suffix_cli,
                 "fim_format": args.fim_format,
             }
         )
+
+    if args.mode == "auto" and samples:
+        has_fim = any(
+            sample.get("fim_prefix") is not None or sample.get("fim_suffix") is not None
+            for sample in samples
+        )
+        has_lm = any(sample.get("prompt") for sample in samples)
+        if has_fim and has_lm:
+            raise SystemExit("Mixed LM/FIM samples detected; set --mode to disambiguate.")
+        mode = "fim" if has_fim else "lm"
+    else:
+        mode = args.mode
 
     output_data = {"metadata": {}, "responses": []}
 
     for sample in samples:
         name = sample.get("name", "sample")
-        fim_prefix = sample.get("fim_prefix", args.fim_prefix)
-        fim_suffix = sample.get("fim_suffix", args.fim_suffix)
-        fim_format = sample.get("fim_format", args.fim_format)
+        if mode == "lm":
+            prompt = sample.get("prompt", prompt_cli)
+            if not prompt:
+                raise SystemExit(f"Sample '{name}' missing prompt for LM mode.")
+        else:
+            fim_prefix = sample.get("fim_prefix", fim_prefix_cli)
+            fim_suffix = sample.get("fim_suffix", fim_suffix_cli)
+            fim_format = sample.get("fim_format", args.fim_format)
 
-        if fim_prefix is not None or fim_suffix is not None:
+            if fim_prefix is None and fim_suffix is None:
+                raise SystemExit(f"Sample '{name}' missing fim_prefix/fim_suffix for FIM mode.")
+
             prompt = build_fim_prompt(
                 fim_prefix or "",
                 fim_suffix or "",
@@ -331,8 +414,6 @@ def main() -> None:
                 fim_suffix_token="<|fim_suffix|>",
                 fim_middle_token="<|fim_middle|>",
             )
-        else:
-            prompt = sample.get("prompt", args.prompt)
 
         if not prompt:
             logger.warning("Sample '%s' has empty prompt.", name)
@@ -362,18 +443,25 @@ def main() -> None:
         for i, tokens in enumerate(responses):
             inp_tok = tokens[:input_n_tokens].tolist()
             out_tok = tokens[input_n_tokens:].tolist()
-            input_text_raw = tokenizer.decode(inp_tok)
-            output_text_raw = tokenizer.decode(out_tok)
+            input_text_raw = decode_tokens(tokenizer, inp_tok, skip_special_tokens=False)
+            output_text_raw = decode_tokens(tokenizer, out_tok, skip_special_tokens=False)
             input_text = clean_byte_level_text(input_text_raw)
             output_text = clean_byte_level_text(output_text_raw)
+            input_text_display = normalize_display_text(input_text_raw)
+            output_text_display = normalize_display_text(output_text_raw)
             output_data["responses"].append(
                 {
                     "name": name,
                     "response_idx": i,
+                    "prompt_text": prompt,
                     "input_text_raw": input_text_raw,
                     "output_text_raw": output_text_raw,
                     "input_text": input_text,
                     "output_text": output_text,
+                    "input_text_display": input_text_display,
+                    "output_text_display": output_text_display,
+                    "input_token_count": input_n_tokens,
+                    "output_token_count": len(out_tok),
                     "generation_time_sec": elapsed,
                 }
             )
@@ -383,16 +471,25 @@ def main() -> None:
         "seed": args.seed,
         "device": device_str,
         "torch_version": torch.__version__,
+        "mode": mode,
     }
 
     if args.out:
         print(json.dumps(output_data, indent=4))
     else:
         for item in output_data["responses"]:
+            logger.info("[%s] prompt:\n%s", item["name"], item["prompt_text"])
+            logger.info("[%s] completion:\n%s", item["name"], item["output_text_display"])
             logger.info(
-                "[%s] raw: %s%s", item["name"], item["input_text_raw"], item["output_text_raw"]
+                "[%s] tokens: prompt=%d completion=%d time=%.2fs",
+                item["name"],
+                item["input_token_count"],
+                item["output_token_count"],
+                item["generation_time_sec"],
             )
-            logger.info("[%s] clean: %s%s", item["name"], item["input_text"], item["output_text"])
+            if args.show_raw:
+                logger.info("[%s] prompt (raw):\n%s", item["name"], item["input_text_raw"])
+                logger.info("[%s] completion (raw):\n%s", item["name"], item["output_text_raw"])
 
 
 if __name__ == "__main__":

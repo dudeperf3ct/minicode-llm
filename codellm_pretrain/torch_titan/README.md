@@ -151,10 +151,10 @@ Smoke test results (2x H100, 1k steps, from W&B):
 >[!WARNING]
 > I ran the following on 4 x H100 which costs $12.36/hr. It will cost about **$150** for running this setup.
 
-For a full run on 4 x H100 GPUs (80 GB SMX5):
-
 >[!IMPORTANT]
 > `data_parallel_replicate_degree` is set to 4 in the config. Change it if you use a different GPU count.
+
+For a full run on 4 x H100 GPUs (80 GB SMX5):
 
 ```bash
 NGPU=4 CONFIG_FILE='./train_configs/full_llama32_1b_swallowcode_tok32k.toml' ./run_train.sh
@@ -179,9 +179,16 @@ Full training results (4x H100, 50k steps, from W&B):
 
 ## Evaluation
 
-Setup the environment by running `uv sync --extra cuda`. Make sure DCP checkpoint are stored under `checkpoint` folder.
+Setup the environment by running `uv sync --extra cuda`. Make sure DCP checkpoint (torchtitan specific format) are stored under `checkpoint` folder.
 
-Use `eval/eval_generate.py` to run inference against a DCP checkpoint. Provide the same config used for training and a checkpoint directory. It uses examples collected in [`eval/eval_samples.jsonl`](./eval/eval_samples.jsonl) file for evaluation. Run from this directory so relative paths resolve.
+> [!NOTE]
+> Uploaded DCP checkpoints to Hugging Face model: https://huggingface.co/dudeperf3ct/codellm_pretrain
+
+Use `eval/eval_generate.py` to run inference against a DCP checkpoint. Provide the same config used for training and a checkpoint directory. Run from this directory so relative paths resolve.
+
+Evaluation modes:
+- LM (standard completion): no FIM tokens, use `--prompt` or a JSONL with `{prompt}` fields.
+- FIM (infilling): inserts `<|fim_prefix|>`, `<|fim_suffix|>`, `<|fim_middle|>` and asks the model to generate the missing middle.
 
 ```bash
 python eval/eval_generate.py \
@@ -191,23 +198,147 @@ python eval/eval_generate.py \
   --max_new_tokens 64 \
   --temperature 0.8 \
   --top_k 50 \
-  --stop_at_eos
+  --stop_at_eos \
+  --custom_import custom_spec
 ```
 
-- `eval/eval_samples.jsonl` accepts `{name, prompt}` or FIM fields `{fim_prefix, fim_suffix, fim_format}`.
-- Use `--prompt` for a single prompt, or add `--out` to print JSON.
+- `eval/eval_samples.jsonl` contains FIM examples (`psm`), not LM prompts. For LM evaluation, use `--prompt` or a separate JSONL with `{name, prompt}`.
+- CLI `--fim_prefix/--fim_suffix` interpret `\n`, `\t`, `\r` by default; pass `--no_interpret_escapes` to keep them literal.
+- Use `--out` to print JSON, or `--show_raw` to include raw decoded text in logs.
+- `--mode` can be `auto` (default), `fim`, or `lm`; `auto` infers the mode from the inputs.
 - `hf_assets/` stores the local tokenizer snapshot referenced by `hf_assets_path` in the config; it is required for eval with the current configs
+- If outputs show extra spaces around punctuation/underscores, that is typically the model's decoded output from a byte-level tokenizer. Use `--show_raw` to inspect the raw decoded text.
 
-Single-prompt example:
+LM (standard completion) example:
 
 ```bash
 python eval/eval_generate.py \
   --config ./train_configs/full_llama32_1b_swallowcode_tok32k.toml \
   --checkpoint ./checkpoint/<step_dir> \
-  --prompt "def sum(a, b):" \
+  --prompt "def count_vowels(s):\n    \"\"\"Count vowels in a string.\"\"\"\n    vowels = set(\"aeiouAEIOU\")\n" \
+  --mode lm \
   --max_new_tokens 64 \
   --temperature 0.8 \
   --top_k 50 \
   --stop_at_eos \
   --custom_import custom_spec
 ```
+
+Single-prompt FIM examples:
+
+PSM (prefix-suffix-middle):
+
+```bash
+python eval/eval_generate.py \
+  --config ./train_configs/full_llama32_1b_swallowcode_tok32k.toml \
+  --checkpoint ./checkpoint/<step_dir> \
+  --fim_prefix "def count_vowels(s):\n    \"\"\"Count vowels in a string.\"\"\"\n    vowels = set(\"aeiouAEIOU\")\n" \
+  --fim_suffix "\n    return count\n" \
+  --fim_format psm \
+  --max_new_tokens 64 \
+  --temperature 0.8 \
+  --top_k 50 \
+  --stop_at_eos \
+  --custom_import custom_spec
+```
+
+Expected: the completion should include a loop over `s` and increment a `count` when a character is in `vowels` (e.g., `count = 0`, `for ch in s:`, `if ch in vowels: count += 1`), then stop near EOS.
+
+SPM (suffix-prefix-middle):
+
+```bash
+python eval/eval_generate.py \
+  --config ./train_configs/full_llama32_1b_swallowcode_tok32k.toml \
+  --checkpoint ./checkpoint/<step_dir> \
+  --fim_prefix "def count_vowels(s):\n    \"\"\"Count vowels in a string.\"\"\"\n    vowels = set(\"aeiouAEIOU\")\n" \
+  --fim_suffix "\n    return count\n" \
+  --fim_format spm \
+  --max_new_tokens 64 \
+  --temperature 0.8 \
+  --top_k 50 \
+  --stop_at_eos \
+  --custom_import custom_spec
+```
+
+Expected: SPM is harder because the suffix comes first, so outputs may be less coherent than PSM. You should still see code-like tokens that fit between the prefix and suffix, but it may take more tokens or look noisier.
+
+Creating `eval/eval_samples.jsonl`:
+- One JSON object per line with `{name, fim_prefix, fim_suffix, fim_format}`.
+- Use `fim_suffix: ""` to turn a prefix prompt into a FIM entry.
+- Pick `fim_format` per sample (the current file uses `psm`).
+
+
+Example evaluation run
+
+<details>
+<summary> Evaluation run on last checkpoint (50k step) full run </summary>
+
+Using LM mode to predict next token as completion task
+
+```bash
+python eval/eval_generate.py \
+  --config ./train_configs/full_llama32_1b_swallowcode_tok32k.toml \
+  --checkpoint ./checkpoint/step-50000 \
+  --prompt "def count_vowels(s):\n    \"\"\"Count vowels in a string.\"\"\"\n    vowels = set(\"aeiouAEIOU\")\n" \
+  --mode lm \
+  --max_new_tokens 64 \
+  --temperature 0.8 \
+  --top_k 50 \
+  --stop_at_eos \
+  --custom_import custom_spec
+[titan] 2026-01-10 22:03:55,522 - root - INFO - Loading tokenizer from tokenizer.json
+[titan] 2026-01-10 22:03:55,791 - root - INFO - Applying Llama-like patch for Llama
+[titan] 2026-01-10 22:04:08,618 - root - INFO - Loading checkpoint: ./checkpoint/step-50000
+/home/dudeperf3ct/projects/mini-codellm/codellm_pretrain/torch_titan/.venv/lib/python3.12/site-packages/torch/distributed/checkpoint/utils.py:483: UserWarning: torch.distributed is disabled, unavailable or uninitialized, assuming the intent is to load in a single process.
+  return func(*args, **kwargs)
+[titan] 2026-01-10 22:04:10,153 - root - INFO - Checkpoint loaded in 1.53 seconds
+[titan] 2026-01-10 22:05:15,528 - root - INFO - [prompt] prompt:
+def count_vowels(s):
+    """Count vowels in a string."""
+    vowels = set("aeiouAEIOU")
+
+[titan] 2026-01-10 22:05:15,529 - root - INFO - [prompt] completion:
+#
+ def print _ from _ with _ with : Tuple _ name == "__ _ path _ title : ") : List and _ on __
+    : Path : List of 2 . append
+ def count : List [ str ( B :
+     start _ path : List [ str , str = [
+     root
+
+
+ def
+[titan] 2026-01-10 22:05:15,529 - root - INFO - [prompt] tokens: prompt=27 completion=64 time=65.37s
+```
+
+Greedy decoding with `temperature=0` and `top_k=1`
+
+```bash
+python eval/eval_generate.py \
+  --config ./train_configs/full_llama32_1b_swallowcode_tok32k.toml \
+  --checkpoint ./checkpoint/step-50000 \
+  --prompt "def count_vowels(s):\n    \"\"\"Count vowels in a string.\"\"\"\n    vowels = set(\"aeiouAEIOU\")\n" \
+  --mode lm \
+  --max_new_tokens 64 \
+  --temperature 0 \
+  --top_k 1 \
+  --stop_at_eos \
+  --custom_import custom_spec
+
+[titan] 2026-01-10 22:07:58,523 - root - INFO - Loading tokenizer from tokenizer.json
+[titan] 2026-01-10 22:07:58,787 - root - INFO - Applying Llama-like patch for Llama
+[titan] 2026-01-10 22:08:10,971 - root - INFO - Loading checkpoint: ./checkpoint/step-50000
+/home/dudeperf3ct/projects/mini-codellm/codellm_pretrain/torch_titan/.venv/lib/python3.12/site-packages/torch/distributed/checkpoint/utils.py:483: UserWarning: torch.distributed is disabled, unavailable or uninitialized, assuming the intent is to load in a single process.
+  return func(*args, **kwargs)
+[titan] 2026-01-10 22:08:12,580 - root - INFO - Checkpoint loaded in 1.61 seconds
+[titan] 2026-01-10 22:09:13,698 - root - INFO - [prompt] prompt:
+def count_vowels(s):
+    """Count vowels in a string."""
+    vowels = set("aeiouAEIOU")
+
+[titan] 2026-01-10 22:09:13,699 - root - INFO - [prompt] completion:
+
+ def print ( f . get _ to _ to _ to _ to _ to _ to _ to _ to _ to _ to _ to _ to - 8 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[titan] 2026-01-10 22:09:13,699 - root - INFO - [prompt] tokens: prompt=27 completion=64 time=61.12
+```
+
+</details>

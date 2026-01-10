@@ -1,8 +1,9 @@
-{"name":"sum_basic","prompt":"def sum(a, b):\n    \"\"\"Return the sum of two numbers.\"\"\"\n    "}
-{"name":"factorial","prompt":"def factorial(n):\n    \"\"\"Compute n! for n >= 0.\"\"\"\n    "}
-{"name":"unique_preserve_order","prompt":"def unique_preserve_order(items):\n    \"\"\"Return a list with duplicates removed, preserving order.\"\"\"\n    "}
-{"name":"parse_csv_line","prompt":"def parse_csv_line(line):\n    \"\"\"Parse a CSV line into a list of fields (no quotes).\"\"\"\n    "}
-{"name":"is_prime","prompt":"def is_prime(n):\n    \"\"\"Return True if n is a prime number.\"\"\"\n    "}
+{"name":"sum_basic","fim_prefix":"def sum(a, b):\n    \"\"\"Return the sum of two numbers.\"\"\"\n    ","fim_suffix":"","fim_format":"psm"}
+{"name":"factorial","fim_prefix":"def factorial(n):\n    \"\"\"Compute n! for n >= 0.\"\"\"\n    ","fim_suffix":"","fim_format":"psm"}
+{"name":"unique_preserve_order","fim_prefix":"def unique_preserve_order(items):\n    \"\"\"Return a list with duplicates removed, preserving order.\"\"\"\n    ","fim_suffix":"","fim_format":"psm"}
+{"name":"parse_csv_line","fim_prefix":"def parse_csv_line(line):\n    \"\"\"Parse a CSV line into a list of fields (no quotes).\"\"\"\n    ","fim_suffix":"","fim_format":"psm"}
+{"name":"is_prime","fim_prefix":"def is_prime(n):\n    \"\"\"Return True if n is a prime number.\"\"\"\n    ","fim_suffix":"","fim_format":"psm"}
 {"name":"fim_clamp","fim_prefix":"def clamp(x, lo, hi):\n    \"\"\"Clamp x into [lo, hi].\"\"\"\n    ","fim_suffix":"\n    return x\n","fim_format":"psm"}
 {"name":"fim_reverse_words","fim_prefix":"def reverse_words(s):\n    \"\"\"Reverse word order in a string.\"\"\"\n    words = s.split()\n","fim_suffix":"\n    return \" \".join(words)\n","fim_format":"psm"}
 {"name":"fim_count_vowels","fim_prefix":"def count_vowels(s):\n    \"\"\"Count vowels in a string.\"\"\"\n    vowels = set('aeiouAEIOU')\n","fim_suffix":"\n    return count\n","fim_format":"psm"}
+{"name":"fim_parse_kv_lines","fim_prefix":"def parse_kv_lines(text):\n    \"\"\"Parse key=value lines into a dict.\"\"\"\n    result = {}\n    for line in text.splitlines():\n        line = line.strip()\n        if not line or line.startswith(\"#\"):\n            continue\n","fim_suffix":"\n    return result\n","fim_format":"psm"}

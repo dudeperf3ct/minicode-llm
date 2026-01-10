@@ -1,7 +1,7 @@
-#!/usr/bin/env python3
-"""Minimal inference script for TorchTitan DCP checkpoints."""
+"""Evaluation script for TorchTitan DCP checkpoints."""
 
-from __future__ import annotations
+# Modified from: https://github.com/pytorch/torchtitan/blob/main/scripts/generate/test_generate.py
+# and https://github.com/pytorch/torchtitan/blob/main/scripts/generate/_generation.py
 
 import argparse
 import importlib
@@ -170,7 +170,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--fim_suffix",
         type=str,
-        default=None,
+        default="<|fim_suffix|>",
         help="FIM suffix text (enables FIM if set)",
     )
     parser.add_argument(
@@ -242,7 +242,11 @@ def main() -> None:
     args = parse_args()
 
     script_dir = Path(__file__).resolve().parent
-    sys.path.insert(0, str(script_dir))
+    project_root = script_dir.parent
+    # Ensure custom modules like `custom_spec.py` at repo root are discoverable.
+    for path in (project_root, script_dir):
+        if str(path) not in sys.path:
+            sys.path.insert(0, str(path))
 
     init_logger()
 

@@ -13,13 +13,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Select one of these extras depending on your machine.
-cpu = [
-    "torch",
-    "torchtitan",
-]
 cuda = [
-    "torch",
+    "torch>=2.10.0.dev0",
     "torchtitan",
 ]
 
@@ -33,17 +28,11 @@ dev = [
 [tool.uv.sources]
 torch = [
     { index = "pytorch-nightly-cu128", marker = "extra == 'cuda' and sys_platform == 'linux'" },
-    { index = "pytorch-nightly-cpu", marker = "extra == 'cpu' and extra != 'cuda'" },
 ]
 
 [[tool.uv.index]]
 name = "pytorch-nightly-cu128"
 url = "https://download.pytorch.org/whl/nightly/cu128"
-explicit = true
-
-[[tool.uv.index]]
-name = "pytorch-nightly-cpu"
-url = "https://download.pytorch.org/whl/nightly/cpu"
 explicit = true
 
 # ruff configuration

@@ -1,6 +1,6 @@
 # Pretraining Code LLMs with TorchTitan
 
-Write up:
+Write up: https://dudeperf3ct.github.io/projects/train_llm_part2/
 
 Training an LLM from scratch using the custom tokenizer and dataset prepared in previous steps.
 
@@ -8,6 +8,7 @@ Custom tokenizer: https://dudeperf3ct.github.io/projects/train_llm_part1/
 
 Dataset: [`tokyotech-llm/swallow-code-v2`](https://huggingface.co/datasets/tokyotech-llm/swallow-code-v2)
 
+Model Architecture: Llama 3.2 1B (1 billion parameter)
 
 ## Dependencies Setup
 

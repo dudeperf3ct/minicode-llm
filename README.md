@@ -3,6 +3,7 @@
 Write-up:
 - https://dudeperf3ct.github.io/projects/train_llm_part0/ (data)
 - https://dudeperf3ct.github.io/projects/train_llm_part1/ (tokenizer)
+- https://dudeperf3ct.github.io/projects/train_llm_part2/ (pretraining)
 
 ## Getting Started
 

@@ -29,11 +29,7 @@ uv pip install -r pyproject.toml
 uv pip install -e .
 ```
 
-Make a copy of the training configuration files and local overrides to torchtitan's directory.
 
-```bash
-cp -r ../train_configs ./train_configs
-```
 
 Create [access token](https://huggingface.co/docs/hub/en/security-tokens) in Hugging Face and login using the `huggingface-cli` tool.
 
@@ -49,7 +45,14 @@ wandb login
 
 ## Debugging
 
-I am using Lambda Labs GPU instance with 1xH100 GPU (80 GB SMX5) for debugging. It costs about $2 to run these.
+> [!WARNING]
+> I am using Lambda Labs GPU instance with 1xH100 GPU (80 GB SMX5) for debugging. It costs about **$2** to run these.
+
+Make a copy of the training configuration files and local overrides to torchtitan's directory.
+
+```bash
+cp -r ../train_configs ./train_configs
+```
 
 ### Memory Estimation
 
@@ -83,9 +86,9 @@ NGPU=16 COMM_MODE="local_tensor" ./run_train.sh \
 >[!NOTE]
 > The `local_tensor` mode did not work for me on a single H100 GPU instance.
 
-### Custom dataset + tokenizer (SwallowCode + 32k)
+## Custom dataset + tokenizer (SwallowCode + 32k) + Llama 3.2 1B model architecture
 
-## Setup
+### Setup
 
 Make a copy of the training configuration files and local overrides to torchtitan's directory.
 
@@ -115,13 +118,13 @@ snapshot_download(
 PY
 ```
 
-## Smoke Test
+### Smoke Test
 
 > [!WARNING]
-> I used 2 x H100 GPUs (80 GB SMX5) for smoke testing. It takes about **$8** to run this smoke testing. It logs the run to wandb.
+> I used 2 x H100 GPUs (80 GB SMX5) for smoke testing. It takes about **$8** to run this smoke testing. It logs the results of the experiments to wandb.
 
 >[!IMPORTANT]
-> Change `data_parallel_replicate_degree` to number of GPUs used for training.
+> Change `data_parallel_replicate_degree` to number of GPUs used for training in the config file for smoke testing.
 
 Run training with the custom config as smoke test:
 
@@ -131,13 +134,18 @@ NGPU=2 CONFIG_FILE='./train_configs/smoke_llama32_1b_swallowcode_tok32k.toml' ./
 
 This runs for 1000 steps. It takes about 15 minutes to complete.
 
-Smoke test notes (2x H100, 1k steps):
-- Loss dropped from ~10.9 to ~4.7; outputs will still look noisy/gibberish at this stage.
-- Throughput stabilized around ~55k tokens/sec with ~41% MFU.
-- Warmup covered the full run (1k warmup steps), so the LR never decayed.
-- Token budget: `steps * global_batch_size * seq_len`. With `local_batch_size=6`, `NGPU=2`, `global_batch_size=12`, `seq_len=8192` -> ~98M tokens.
+Smoke test results (2x H100, 1k steps, from W&B):
+- Completed 1k steps / 98.3M tokens in ~15.4 minutes.
+- Loss fell from 10.88 -> 4.69; LR warmed from 3e-7 to 3e-4 by step 1k (warmup covered the full run).
+- Step time stabilized around ~0.90s; per-rank throughput ~54-55k tps (global ~109k), MFU ~41% (~405 TFLOPS).
+- Data loading was negligible (~0.03% of step time) and memory stayed flat at ~70.2 GiB active / 72.8 GiB reserved, with 0 OOMs or alloc retries.
+- Token budget: `steps * global_batch_size * seq_len`. With `local_batch_size=6`, `NGPU=2`, `global_batch_size=12`, `seq_len=8192` -> 98,304 tokens/step (98.3M at 1k steps).
 
-## Full Training
+> [!NOTE]
+> W&B plots for experiment: [Plots](https://wandb.ai/dudeperf3ct/torchtitan/groups/Smoke%20run%20-%2098M%20tokens/workspace?nw=nwuserdudeperf3ct), [Logs](https://wandb.ai/dudeperf3ct/torchtitan/groups/Smoke%20run%20-%2098M%20tokens/logs), [Summary](https://wandb.ai/dudeperf3ct/torchtitan/groups/Smoke%20run%20-%2098M%20tokens/overview) and [Report](https://wandb.ai/dudeperf3ct/torchtitan/reports/Pretraining-LLM-experiment--VmlldzoxNTU4NTA1NQ)
+
+
+### Full Training
 
 >[!WARNING]
 > I ran the following on 4 x H100 which costs $12.36/hr. It will cost about **$150** for running this setup.
@@ -157,17 +165,26 @@ Insights for full training from smoke testing (for 4x H100):
 - With `steps=50000`: `tokens ~ 24 * 8192 * 50000 ~ 9.83B`
 - Using smoke-test throughput (~55k tokens/sec/GPU on 2x H100), estimate step time as `(global_batch_size * seq_len) / (tps_per_gpu * NGPU)` -> ~0.9s/step on 4 GPUs
 - That puts 50k steps at ~ 12.5 hours (~$144 at $12.36/hr)
-- Compute-optimal for a 1B model is ~20B tokens (Chinchilla), so this run is still undertrained
+- Compute-optimal for a 1B model is ~20B tokens (Chinchilla), so this run is still undertrained.
+
+> [!NOTE]
+> W&B plots for experiment: [Plots](https://wandb.ai/dudeperf3ct/torchtitan/groups/Full%20run%20-%209.8B%20tokens/workspace), [Logs](https://wandb.ai/dudeperf3ct/torchtitan/groups/Full%20run%20-%209.8B%20tokens/logs), [Summary](https://wandb.ai/dudeperf3ct/torchtitan/groups/Full%20run%20-%209.8B%20tokens/overview) and [Report](https://wandb.ai/dudeperf3ct/torchtitan/reports/Pretraining-LLM-experiment--VmlldzoxNTU4NTA1NQ)
+
+Full training results (4x H100, 50k steps, from W&B):
+- Completed 50k steps / 9.83B tokens in ~ 12.26 hours (~$152 at $12.36/hr).
+- Loss fell from 10.86 -> 2.91; LR warmed up to 3e-4 by step 800 then cosine-decayed to ~0 by the end.
+- Step time stabilized around ~0.88s; per-rank throughput ~55.8k tps (global ~223k), MFU ~42% (~416 TFLOPS).
+- Data loading was negligible (~0.03% of step time) and memory stayed flat at ~70.2 GiB active / 70.9 GiB reserved (88-89% of 80GB), with 0 OOMs or alloc retries.
 
 ## Evaluation
 
-Setup the environment by running `uv sync --extra cpu` or `uv sync --extra cuda` command for CPU and GPU system. Make sure DCP checkpoint are stored under `checkpoint` folder.
+Setup the environment by running `uv sync --extra cuda`. Make sure DCP checkpoint are stored under `checkpoint` folder.
 
 Use `eval/eval_generate.py` to run inference against a DCP checkpoint. Provide the same config used for training and a checkpoint directory. It uses examples collected in [`eval/eval_samples.jsonl`](./eval/eval_samples.jsonl) file for evaluation. Run from this directory so relative paths resolve.
 
 ```bash
 python eval/eval_generate.py \
-  --config ./train_configs/smoke_llama32_1b_swallowcode_tok32k.toml \
+  --config ./train_configs/full_llama32_1b_swallowcode_tok32k.toml \
   --checkpoint ./checkpoint/<step_dir> \
   --samples ./eval/eval_samples.jsonl \
   --max_new_tokens 64 \
@@ -184,7 +201,7 @@ Single-prompt example:
 
 ```bash
 python eval/eval_generate.py \
-  --config ./train_configs/smoke_llama32_1b_swallowcode_tok32k.toml \
+  --config ./train_configs/full_llama32_1b_swallowcode_tok32k.toml \
   --checkpoint ./checkpoint/<step_dir> \
   --prompt "def sum(a, b):" \
   --max_new_tokens 64 \

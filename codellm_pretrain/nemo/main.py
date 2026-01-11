@@ -1,21 +1,64 @@
-# template/main.py.jinja
-"""Main entry point for codellm_pretrain."""
+"""Pretraining LLM."""
 
-import sys
-from pathlib import Path
-
-
-def main() -> int:
-    """Run the application.
-
-    Returns:
-        Exit code (0 for success, non-zero for error).
-    """
-    print("Hello from codellm_pretrain!")
-    print(f"Python: {sys.version}")
-    print(f"Working directory: {Path.cwd()}")
-    return 0
-
+import torch
+from megatron.core.optimizer import OptimizerConfig
+from nemo import lightning as nl
+from nemo.collections import llm
 
 if __name__ == "__main__":
-    sys.exit(main())
+    seq_length = 2048
+    global_batch_size = 16
+
+    ## setup the dummy dataset
+    data = llm.MockDataModule(seq_length=seq_length, global_batch_size=global_batch_size)
+
+    ## initialize a small GPT model
+    gpt_config = llm.GPTConfig(
+        num_layers=6,
+        hidden_size=384,
+        ffn_hidden_size=1536,
+        num_attention_heads=6,
+        seq_length=seq_length,
+        init_method_std=0.023,
+        hidden_dropout=0.1,
+        attention_dropout=0.1,
+        layernorm_epsilon=1e-5,
+        make_vocab_size_divisible_by=128,
+    )
+    model = llm.GPTModel(gpt_config, tokenizer=data.tokenizer)
+
+    ## initialize the strategy
+    strategy = nl.MegatronStrategy(
+        tensor_model_parallel_size=1,
+        pipeline_model_parallel_size=1,
+        pipeline_dtype=torch.bfloat16,
+    )
+
+    ## setup the optimizer
+    opt_config = OptimizerConfig(
+        optimizer="adam",
+        lr=6e-4,
+        bf16=True,
+    )
+    opt = nl.MegatronOptimizerModule(config=opt_config)
+
+    trainer = nl.Trainer(
+        devices=1,  ## you can change the number of devices to suit your setup
+        max_steps=50,
+        accelerator="gpu",
+        strategy=strategy,
+        plugins=nl.MegatronMixedPrecision(precision="bf16-mixed"),
+    )
+
+    nemo_logger = nl.NeMoLogger(
+        log_dir="test_logdir",  ## logs and checkpoints will be written here
+    )
+
+    llm.train(
+        model=model,
+        data=data,
+        trainer=trainer,
+        log=nemo_logger,
+        tokenizer="data",
+        optim=opt,
+    )

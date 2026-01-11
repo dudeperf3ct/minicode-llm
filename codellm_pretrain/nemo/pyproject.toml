@@ -4,12 +4,13 @@ name = "codellm_pretrain_nemo"
 version = "0.1.0"
 description = "Pretraining an LLM using NeMO framework"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.12, <3.13"
 authors = [
     { name = "dudeperf3ct" }
 ]
 dependencies = [
-
+    "nemo-toolkit[all]>=2.6.1",
+    "torch>=2.9.1",
 ]
 
 [dependency-groups]

@@ -38,10 +38,12 @@ loss_fn:
 
 dataset:
   _target_: dataset.swallow_fim_iterable_dataset.SwallowCodeFIMIterableDataset
-  hf_path: tokyotech-llm/swallow-code-v2
-  hf_subset: swallowcode-v2
-  split: train
-  text_field: improved_code
+  hf_config:
+    _target_: dataset.swallow_fim_iterable_dataset.HFDatasetConfig
+    path: tokyotech-llm/swallow-code-v2
+    subset: swallowcode-v2
+    split: train
+    text_field: improved_code
   seq_len: 2048
   infinite: true
   max_rows_per_epoch: 5

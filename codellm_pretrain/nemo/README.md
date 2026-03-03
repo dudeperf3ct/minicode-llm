@@ -9,6 +9,11 @@ Training an LLM from scratch using the custom tokenizer and dataset prepared in 
 Custom tokenizer: https://dudeperf3ct.github.io/projects/train_llm_part1/
 Dataset: [`tokyotech-llm/swallow-code-v2`](https://huggingface.co/datasets/tokyotech-llm/swallow-code-v2)
 
+
+> [!WARNING]
+> I am using Lambda Labs GPU instance with 1xA100 GPU (40 GB SMX4) for running Step 1 and Step 2. It costs about **$1.48/hr**.
+
+
 ## Step 1: Streaming FIM data pipeline
 
 - Dataset implementation: `dataset/swallow_fim_iterable_dataset.py`
@@ -43,7 +48,7 @@ print(sorted(batch.keys()), tuple(batch["input_ids"].shape), tuple(batch["labels
 PY
 ```
 
-## Step 3: Evaluation gates before scale-up
+## Step 3: Evaluation
 
 - Eval script: `eval/eval_fim_generate.py`
 - Eval samples: `eval/eval_samples.jsonl`

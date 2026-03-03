@@ -39,10 +39,12 @@ loss_fn:
 
 dataset:
   _target_: dataset.swallow_fim_iterable_dataset.SwallowCodeFIMIterableDataset
-  hf_path: tokyotech-llm/swallow-code-v2
-  hf_subset: swallowcode-v2
-  split: train
-  text_field: improved_code
+  hf_config:
+    _target_: dataset.swallow_fim_iterable_dataset.HFDatasetConfig
+    path: tokyotech-llm/swallow-code-v2
+    subset: swallowcode-v2
+    split: train
+    text_field: improved_code
   seq_len: 8192
   infinite: true
   seed: 42
@@ -82,3 +84,7 @@ lr_scheduler:
 
 clip_grad_norm:
   max_norm: 1.0
+
+wandb:
+  project: nemo
+  name: full run

@@ -47,6 +47,7 @@ dataset:
     text_field: improved_code
   seq_len: 8192
   infinite: true
+  samples_per_epoch: 120000
   seed: 42
   tokenizer:
     _target_: nemo_automodel._transformers.auto_tokenizer.NeMoAutoTokenizer.from_pretrained
@@ -63,6 +64,8 @@ packed_sequence:
 
 dataloader:
   _target_: torchdata.stateful_dataloader.StatefulDataLoader
+  batch_size: 6
+  drop_last: true
   collate_fn: torch.utils.data.default_collate
   shuffle: true
   shuffle_buffer_size: 10000

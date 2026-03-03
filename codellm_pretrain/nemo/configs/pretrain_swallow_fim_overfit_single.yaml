@@ -46,6 +46,7 @@ dataset:
     text_field: improved_code
   seq_len: 2048
   infinite: true
+  samples_per_epoch: 30
   max_rows_per_epoch: 1
   vary_fim_across_epochs: false
   shuffle_buffer_size: 0
@@ -65,6 +66,8 @@ packed_sequence:
 
 dataloader:
   _target_: torchdata.stateful_dataloader.StatefulDataLoader
+  batch_size: 1
+  drop_last: true
   collate_fn: torch.utils.data.default_collate
   shuffle: false
   num_workers: 0

@@ -149,6 +149,7 @@ class SwallowCodeFIMIterableDataset(IterableDataset):
         fim_config: FIMConfig | None = None,
         seed: int = 42,
         infinite: bool = True,
+        samples_per_epoch: int | None = None,
         max_rows_per_epoch: int | None = None,
         shuffle_buffer_size: int = 0,
         vary_fim_across_epochs: bool = True,
@@ -163,6 +164,7 @@ class SwallowCodeFIMIterableDataset(IterableDataset):
         self.hf_config = hf_config or HFDatasetConfig()
         self.seed = seed
         self.infinite = infinite
+        self.samples_per_epoch = samples_per_epoch
         self.max_rows_per_epoch = max_rows_per_epoch
         self.shuffle_buffer_size = shuffle_buffer_size
         self.vary_fim_across_epochs = vary_fim_across_epochs
@@ -170,6 +172,8 @@ class SwallowCodeFIMIterableDataset(IterableDataset):
         self.world_size = 1
         self.fim_config = fim_config or FIMConfig()
 
+        if self.samples_per_epoch is not None and self.samples_per_epoch <= 0:
+            raise ValueError("samples_per_epoch must be > 0 when provided")
         if self.max_rows_per_epoch is not None and self.max_rows_per_epoch <= 0:
             raise ValueError("max_rows_per_epoch must be > 0 when provided")
         if self.shuffle_buffer_size < 0:
@@ -200,6 +204,7 @@ class SwallowCodeFIMIterableDataset(IterableDataset):
             fim_config=self.fim_config,
             seed=self.seed,
             infinite=self.infinite,
+            samples_per_epoch=self.samples_per_epoch,
             max_rows_per_epoch=self.max_rows_per_epoch,
             shuffle_buffer_size=self.shuffle_buffer_size,
             vary_fim_across_epochs=self.vary_fim_across_epochs,
@@ -229,6 +234,14 @@ class SwallowCodeFIMIterableDataset(IterableDataset):
     def get_telemetry(self) -> dict[str, float | int]:
         return self.telemetry.to_dict()
 
+    def __len__(self) -> int:
+        if self.samples_per_epoch is None:
+            raise TypeError(
+                "SwallowCodeFIMIterableDataset has no static length. "
+                "Set dataset.samples_per_epoch when using lr_scheduler."
+            )
+        return self.samples_per_epoch
+
     def _iter_worker_stream(self):
         stream = self.dataset
         worker = get_worker_info()
@@ -249,6 +262,7 @@ class SwallowCodeFIMIterableDataset(IterableDataset):
         epoch = 0
 
         while True:
+            yielded_in_epoch = 0
             rng = self._build_rng(epoch)
             worker_stream = self._iter_worker_stream()
             row_iter = (
@@ -257,7 +271,7 @@ class SwallowCodeFIMIterableDataset(IterableDataset):
                 else worker_stream
             )
             for row in row_iter:
-                raw_text = row.get(self.text_field)
+                raw_text = row.get(self.hf_config.text_field)
                 if not isinstance(raw_text, str) or not raw_text:
                     self.telemetry.mark_missing_text()
                     continue
@@ -279,6 +293,18 @@ class SwallowCodeFIMIterableDataset(IterableDataset):
                         "input_ids": input_ids,
                         "labels": labels,
                     }
+                    yielded_in_epoch += 1
+                    if (
+                        self.samples_per_epoch is not None
+                        and yielded_in_epoch >= self.samples_per_epoch
+                    ):
+                        break
+
+                if (
+                    self.samples_per_epoch is not None
+                    and yielded_in_epoch >= self.samples_per_epoch
+                ):
+                    break
 
             if not self.infinite:
                 break

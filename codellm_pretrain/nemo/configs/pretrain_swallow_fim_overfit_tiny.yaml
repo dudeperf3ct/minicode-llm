@@ -3,9 +3,9 @@
 seed: 42
 
 step_scheduler:
-  global_batch_size: 4
-  local_batch_size: 2
-  ckpt_every_steps: 100
+  global_batch_size: 8
+  local_batch_size: 4 # Grad acc steps = global_batch_size // local_batch_size = 2
+  ckpt_every_steps: 300
   max_steps: 600
 
 dist_env:
@@ -50,7 +50,7 @@ dataset:
     text_field: improved_code
   seq_len: 2048
   infinite: true
-  samples_per_epoch: 240
+  samples_per_epoch: 2400
   max_rows_per_epoch: 5
   vary_fim_across_epochs: false
   shuffle_buffer_size: 0
@@ -94,3 +94,7 @@ lr_scheduler:
 
 clip_grad_norm:
   max_norm: 1.0
+
+wandb:
+  project: nemo
+  name: overfit tiny subset

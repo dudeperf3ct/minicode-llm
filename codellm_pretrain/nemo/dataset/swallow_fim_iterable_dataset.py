@@ -260,6 +260,8 @@ class SwallowCodeFIMIterableDataset(IterableDataset):
         max_tokens = self.seq_len + 1
         token_buffer: list[int] = []
         epoch = 0
+        emitted_total = 0
+        target_total = self.samples_per_epoch
 
         while True:
             yielded_in_epoch = 0
@@ -294,6 +296,9 @@ class SwallowCodeFIMIterableDataset(IterableDataset):
                         "labels": labels,
                     }
                     yielded_in_epoch += 1
+                    emitted_total += 1
+                    if target_total is not None and emitted_total >= target_total:
+                        return
                     if (
                         self.samples_per_epoch is not None
                         and yielded_in_epoch >= self.samples_per_epoch
@@ -306,6 +311,6 @@ class SwallowCodeFIMIterableDataset(IterableDataset):
                 ):
                     break
 
-            if not self.infinite:
+            if target_total is None and not self.infinite:
                 break
             epoch += 1

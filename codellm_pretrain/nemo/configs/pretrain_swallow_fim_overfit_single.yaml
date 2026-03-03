@@ -22,7 +22,7 @@ model:
     max_position_embeddings: 8192
     bos_token_id: 0
     eos_token_id: 0
-    pad_token_id: 0
+    pad_token_id: 6
 
 checkpoint:
   enabled: true
@@ -60,7 +60,7 @@ dataset:
     pretrained_model_name_or_path: dudeperf3ct/codellm-tokenizer
     eos_token: <|endoftext|>
     bos_token: <|endoftext|>
-    pad_token: <|endoftext|>
+    pad_token: <pad>
   fim_config:
     _target_: dataset.swallow_fim_iterable_dataset.FIMConfig
     fim_rate: 1.0

@@ -164,6 +164,22 @@ uv pip install \
   --index-url https://download.pytorch.org/whl/cu128
 ```
 
+Install the Qwen3.5 Gated DeltaNet dependencies. Transformers requires both
+Flash Linear Attention and causal-conv1d for its Qwen3.5 fast path:
+
+```bash
+uv pip install 'flash-linear-attention==0.4.1'
+
+uv pip install \
+  'https://huggingface.co/datasets/dudeperf3ct/qwen35-sft-wheels/resolve/main/causal-conv1d/py312-torch211-cu128/causal_conv1d-1.6.2.post1-cp312-cp312-linux_x86_64.whl'
+```
+
+> [!IMPORTANT]
+> This `causal-conv1d` wheel is built specifically for CPython 3.12, Linux
+> x86_64, PyTorch 2.11 with CUDA 12.8, and NVIDIA H100 (`sm_90`). Do not reuse
+> it with a different Python, PyTorch, CUDA, operating-system, CPU, or GPU
+> architecture combination.
+
 Install the Cut Cross Entropy dependency required by the Axolotl plugin:
 
 ```bash
@@ -191,6 +207,7 @@ print("axolotl:", version("axolotl"))
 print("transformers:", transformers.__version__)
 print("flash-attn-3:", version("flash-attn-3"))
 print("flash-linear-attention:", version("flash-linear-attention"))
+print("causal-conv1d:", version("causal-conv1d"))
 print("cut-cross-entropy:", version("cut-cross-entropy"))
 PY
 ```
@@ -206,6 +223,7 @@ axolotl: 0.18.0
 transformers: 5.14.1
 flash-attn-3: 3.0.0
 flash-linear-attention: 0.4.1
+causal-conv1d: 1.6.2.post1
 cut-cross-entropy: 25.5.2
 ```
 
@@ -345,10 +363,10 @@ Within either training method, direct and reasoning differ only in target select
 
 - dataset_prepared_path: ./prepared/p2-10k-direct-<method>-s42
 - output_dir: ./outputs/p2-10k-direct-<method>-s42
-- wandb_name: p2-10k-direct-<method>-s42
+- wandb_name: main-10k-direct-<method>-seed42
 + dataset_prepared_path: ./prepared/p2-10k-reasoning-<method>-s42
 + output_dir: ./outputs/p2-10k-reasoning-<method>-s42
-+ wandb_name: p2-10k-reasoning-<method>-s42
++ wandb_name: main-10k-reasoning-<method>-seed42
 ```
 
 For either target, LoRA and language-model full FT differ only in method
@@ -368,10 +386,10 @@ settings and run identity:
 
 - dataset_prepared_path: ./prepared/p2-10k-<target>-lora-s42
 - output_dir: ./outputs/p2-10k-<target>-lora-s42
-- wandb_name: p2-10k-<target>-lora-s42
+- wandb_name: main-10k-<target>-lora-seed42
 + dataset_prepared_path: ./prepared/p2-10k-<target>-fft-s42
 + output_dir: ./outputs/p2-10k-<target>-fft-s42
-+ wandb_name: p2-10k-<target>-fft-s42
++ wandb_name: main-10k-<target>-fft-seed42
 ```
 
 Verified final weights will later use:

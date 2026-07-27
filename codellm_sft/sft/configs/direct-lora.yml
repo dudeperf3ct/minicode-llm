@@ -55,7 +55,7 @@ gradient_checkpointing: true
 gradient_checkpointing_kwargs:
   use_reentrant: false
 
-attn_implementation: flash_attention_2
+attn_implementation: flash_attention_3
 
 optimizer: adamw_torch_fused
 lr_scheduler: cosine

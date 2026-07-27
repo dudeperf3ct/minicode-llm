@@ -63,10 +63,7 @@ def main() -> None:
 
     tokenizer = AutoTokenizer.from_pretrained(config.model, revision=config.revision)
     eot_id = _single_token_id(tokenizer, config.eot_token)
-    measurements = [
-        _audit_row(config, source, prepared[index], tokenizer, eot_id)
-        for index, source in enumerate(source_rows)
-    ]
+    measurements = _audit_dataset(config, source_rows, prepared, tokenizer, eot_id)
     data_writer.write_json(
         config.output, _build_report(config, prepared_path, measurements, args.examples)
     )
@@ -93,6 +90,28 @@ def load_audit_config(path: Path, output: Path | None = None) -> AuditConfig:
         sequence_length=raw["sequence_len"],
         eot_token=raw["eot_tokens"][0],
     )
+
+
+def _audit_dataset(
+    config: AuditConfig,
+    source_rows: Dataset,
+    prepared: Dataset,
+    tokenizer: PreTrainedTokenizerBase,
+    eot_id: int,
+) -> list[dict[str, int | str | bool]]:
+    source_by_input = {}
+    for source in source_rows:
+        messages = _expected_messages(source, config.variant)[1]
+        source_by_input[tuple(_render_ids(tokenizer, messages))] = source
+
+    measurements = []
+    for prepared_row in prepared:
+        input_ids = tuple(_integer_list(prepared_row, "input_ids"))
+        source = source_by_input.pop(input_ids, None)
+        if source is None:
+            raise ValueError("Prepared input_ids do not match any source conversation")
+        measurements.append(_audit_row(config, source, prepared_row, tokenizer, eot_id))
+    return measurements
 
 
 def _audit_row(

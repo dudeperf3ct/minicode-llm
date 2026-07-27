@@ -39,8 +39,7 @@ uv run python -c \
 
 ## Prepare Matched Data
 
-The script downloads only the pinned KodCode `default/train` split and never
-loads the published `incorrect` or `use_with_caution` splits.
+The script downloads only the pinned KodCode `default/train` split and never loads the published `incorrect` or `use_with_caution` splits.
 
 ```bash
 uv run python scripts/prepare_data.py
@@ -52,11 +51,7 @@ Regeneration is explicit:
 uv run python scripts/prepare_data.py --overwrite
 ```
 
-The pipeline performs source validation, normalized-question deduplication,
-Open-R1-style word 8-gram decontamination, Qwen3.5 chat-template length
-filtering, joint-stratum largest-remainder sampling, nested subset selection,
-and fail-fast split assertions. Generated JSONL and statistics live under
-`data/`; the trackable checksum manifest is `manifests/data_manifest.json`.
+The pipeline performs source validation, normalized-question deduplication, Open-R1-style word 8-gram decontamination, Qwen3.5 chat-template length filtering, joint-stratum largest-remainder sampling, nested subset selection, and fail-fast split assertions. Generated JSONL and statistics live under `data/`; the trackable checksum manifest is `manifests/data_manifest.json`.
 
 The pinned run produced:
 
@@ -67,46 +62,26 @@ The pinned run produced:
 - 240,575 eligible rows before stratified selection;
 - exact 10,000/500/500 train, validation, and untouched test splits.
 
-On the selected training split, reasoning assistant turns contain 26.63 times
-as many tokens as direct assistant turns. The reasoning total-length p99 is
-14,340 tokens.
+On the selected training split, reasoning assistant turns contain 26.63 times as many tokens as direct assistant turns. The reasoning total-length p99 is 14,340 tokens.
 
-LiveCodeBench is still pinned to the official dataset revision. Because its
-official Hugging Face dataset uses a remote loader script, the pipeline
-column-reads only `question_id` and `question_content` from the separately
-pinned `lighteval/code_generation_lite` `release_v5` Parquet mirror. The
-normalized 880-prompt snapshot hash is recorded in the output statistics.
+LiveCodeBench is still pinned to the official dataset revision. Because its official Hugging Face dataset uses a remote loader script, the pipeline column-reads only `question_id` and `question_content` from the separately pinned `lighteval/code_generation_lite` `release_v5` Parquet mirror. The normalized 880-prompt snapshot hash is recorded in the output statistics.
 
 ## Code Layout
 
 - `scripts/prepare_data.py` is the thin command orchestration layer.
-- `scripts/data_pipeline.py` handles verified-source filtering, length
-  filtering, stratified selection, and split validation.
-- `scripts/data_writer.py` owns deterministic JSON/JSONL output, paired
-  rendering, and token measurement.
-- `scripts/decontaminate.py` owns pinned benchmark loading and the reusable
-  `NgramDecontaminator`.
+- `scripts/data_pipeline.py` handles verified-source filtering, length filtering, stratified selection, and split validation.
+- `scripts/data_writer.py` owns deterministic JSON/JSONL output, paired rendering, and token measurement.
+- `scripts/decontaminate.py` owns pinned benchmark loading and the reusable `NgramDecontaminator`.
 - `scripts/data_statistics.py` owns token and stratum aggregation.
-- `scripts/pipeline_utils.py` owns shared models, normalization, hashing,
-  batching, and tokenizer helpers.
-- `scripts/pipeline_reports.py` owns ordered-ID, allocation, statistics, and
-  checksum manifests.
-- `scripts/upload_dataset.py` verifies and uploads the reusable training
-  payload.
+- `scripts/pipeline_utils.py` owns shared models, normalization, hashing, batching, and tokenizer helpers.
+- `scripts/pipeline_reports.py` owns ordered-ID, allocation, statistics, and checksum manifests.
+- `scripts/upload_dataset.py` verifies and uploads the reusable training payload.
 
 ## Publish Prepared Training Data
 
-Hugging Face supports uploading a folder directly to a dataset repository
-revision. The repository must already exist, and local Hugging Face
-authentication must have write access.
+Hugging Face supports uploading a folder directly to a dataset repository revision. The repository must already exist, and local Hugging Face authentication must have write access.
 
-Create `dudeperf3ct/qwen35-kodcode-sft-data` as a dataset repository and
-initialize its `main` branch before running the uploader. Repository visibility
-is a release decision.
-
-For authentication, either run `hf auth login` or provide a User Access Token
-through `HF_TOKEN`. A fine-grained token with write access limited to this
-dataset repository is preferred. Do not place the token in this repository.
+For authentication, either run `hf auth login` or provide a User Access Token through `HF_TOKEN`. A fine-grained token with write access limited to this dataset repository is preferred.
 
 Verify the active identity without printing the token:
 
@@ -130,9 +105,7 @@ uv run python scripts/upload_dataset.py \
   --repo-id dudeperf3ct/qwen35-kodcode-sft-data
 ```
 
-The uploader targets `main` by default, verifies local checksums before any
-remote mutation, and prints the resulting commit SHA. Pin that SHA in every
-Axolotl configuration before preprocessing or training.
+The uploader targets `main` by default, verifies local checksums before any remote mutation, and prints the resulting commit SHA. Pin that SHA in every Axolotl configuration before preprocessing or training.
 
 The upload contains two loadable configurations:
 
@@ -152,28 +125,43 @@ reasoning = load_dataset(
 ```
 
 Each configuration exposes `train`, `validation`, `pilot`, and `overfit`.
-Untouched test questions, private tests, selected test IDs, and the detailed
-decontamination report are excluded so the training machine cannot consume
-them accidentally.
-
-See the official Hugging Face documentation for
-[repository branches](https://huggingface.co/docs/huggingface_hub/en/guides/repository#branches-and-tags)
-and
-[folder uploads](https://huggingface.co/docs/huggingface_hub/en/guides/upload#upload-a-folder).
 
 ## H100 Training Environment
 
-Choose the PyTorch backend supported by the H100 host, then create the
-environment:
+The Lambda Labs `1 x H100` machine configuration is the following:
+
+- NVIDIA H100 80 GB HBM3 SXM5;
+- 26 vCPUs and 225 GiB RAM;
+- 2.8 TiB SSD;
+- NVIDIA driver `580.105.08`;
+- driver-supported CUDA `13.0`;
+- installed CUDA compiler toolkit `12.8`.
 
 ```bash
-export UV_TORCH_BACKEND=<cu128-or-cu130>
+export UV_TORCH_BACKEND=cu128
 
-uv venv
+uv venv --python 3.12
 source .venv/bin/activate
+
+uv pip install \
+  'torch==2.11.0' \
+  'torchvision==0.26.0'
 
 uv pip install --no-build-isolation \
   'axolotl[deepspeed]==0.18.0'
+
+uv pip install \
+  'transformers==5.14.1' \
+  'datasets==4.4.1' \
+  'huggingface-hub==1.23.0'
+```
+
+Install the official CUDA 12.8 FlashAttention-3 wheel published by PyTorch:
+
+```bash
+uv pip install \
+  'flash-attn-3==3.0.0' \
+  --index-url https://download.pytorch.org/whl/cu128
 ```
 
 Install the Cut Cross Entropy dependency required by the Axolotl plugin:
@@ -188,50 +176,76 @@ uv pip install \
 Verify the training dependencies:
 
 ```bash
-python -c "import axolotl, cut_cross_entropy, transformers; print(transformers.__version__)"
+python - <<'PY'
+from importlib.metadata import version
+
+import flash_attn_interface
+import torch
+import transformers
+
+print("torch:", torch.__version__)
+print("torch CUDA:", torch.version.cuda)
+print("GPU:", torch.cuda.get_device_name())
+print("BF16:", torch.cuda.is_bf16_supported())
+print("axolotl:", version("axolotl"))
+print("transformers:", transformers.__version__)
+print("flash-attn-3:", version("flash-attn-3"))
+print("flash-linear-attention:", version("flash-linear-attention"))
+print("cut-cross-entropy:", version("cut-cross-entropy"))
+PY
 ```
 
-The planned configurations use `sample_packing: false`, so Flash Linear
-Attention is not required initially. DeepSpeed is installed through Axolotl's
-documented extra but will not be enabled for the single-H100 runs.
+Expected versions:
+
+```text
+torch: 2.11.0+cu128
+torch CUDA: 12.8
+GPU: NVIDIA H100 80GB HBM3
+BF16: True
+axolotl: 0.18.0
+transformers: 5.14.1
+flash-attn-3: 3.0.0
+flash-linear-attention: 0.4.1
+cut-cross-entropy: 25.5.2
+```
+
+All four experiment configurations use `attn_implementation:
+flash_attention_3`. FlashAttention-3 benchmarks show a `1.5-2.0x` forward and `1.5-1.75x` backward attention-kernel speedup over FlashAttention-2 on an H100 SXM5. Qwen3.5 also contains Gated DeltaNet layers, so the 1K pilot must record the actual end-to-end training throughput rather than assuming the full kernel-level speedup.
+
+See the [Axolotl attention documentation](https://docs.axolotl.ai/docs/attention.html#flash-attention-3) and the [FlashAttention-3 paper](https://tridao.me/publications/flash3/flash3.pdf).
+
+Flash Linear Attention `0.4.1`, installed with Axolotl, accelerates Qwen3.5's Gated DeltaNet layers and is separate from FlashAttention-3. Sample packing remains disabled. DeepSpeed is installed through Axolotl's documented extra but will not be enabled for the single-H100 runs.
+
 
 ## Audit Chat Labels
 
 The audit configurations are preprocessing-only inputs. They read the
-`overfit` split from the prepared Hub dataset, use the official `qwen3_5`
-template, train only assistant turns, split reasoning targets into Qwen's
-`reasoning_content`, and explicitly identify `<|im_end|>` as the turn
-terminator. Direct and reasoning use separate prepared-data paths.
+`overfit` split from the prepared Hub dataset, use the official `qwen3_5` template, train only assistant turns, split reasoning targets into Qwen's `reasoning_content`, and explicitly identify `<|im_end|>` as the turn terminator. Direct and reasoning use separate prepared-data paths.
 
 From the H100 environment, run:
 
 ```bash
-axolotl preprocess configs/audit-direct.yml \
-  --debug \
-  --debug-num-examples 5
-uv run python scripts/audit_labels.py configs/audit-direct.yml
+mkdir -p logs/label-audit
+set -o pipefail
 
-axolotl preprocess configs/audit-reasoning.yml \
-  --debug \
-  --debug-num-examples 5
-uv run python scripts/audit_labels.py configs/audit-reasoning.yml
+(
+  axolotl preprocess configs/audit-direct.yml \
+    --debug \
+    --debug-num-examples 5 \
+  && python scripts/audit_labels.py configs/audit-direct.yml
+) 2>&1 | tee logs/label-audit/direct.log
+
+(
+  axolotl preprocess configs/audit-reasoning.yml \
+    --debug \
+    --debug-num-examples 5 \
+  && python scripts/audit_labels.py configs/audit-reasoning.yml
+) 2>&1 | tee logs/label-audit/reasoning.log
 ```
 
-The auditor checks every prepared row, records safe summaries for five examples
-by default, and fails on template, masking, target, reasoning, length, or EOT
-drift. It writes reports under `reports/label-audit/`; it does not modify
-`data/token_statistics.json`.
+The auditor matches prepared rows to source conversations by their rendered token sequence, so Axolotl's preprocessing order does not affect the audit. It checks every prepared row, records safe summaries for five examples by default, and fails on template, masking, target, reasoning, length, or EOT drift. It writes reports under `reports/label-audit/`; it does not modify `data/token_statistics.json`.
 
-The pinned official template renders direct assistant turns as
-`<think>\n\n</think>\n\n<code>` even though the direct source target contains
-only `r1_solution`. Axolotl's assistant-turn boundary treats that empty block
-as template text, so its tokens remain masked while the code and assistant EOT
-are trainable. The audit requires this exact behavior rather than replacing the
-official template.
-
-This milestone intentionally records actual label counts for the 32-example
-audit only. Full-split label statistics will be generated from the later main
-Axolotl preprocessing outputs; the untouched test split has no training labels.
+The pinned official template renders direct assistant turns as `<think>\n\n</think>\n\n<code>` even though the direct source target contains only `r1_solution`. Axolotl's assistant-turn boundary treats that empty block as template text, so its tokens remain masked while the code and assistant EOT are trainable. The audit requires this exact behavior rather than replacing the official template.
 
 Axolotl's dataset and CLI behavior used here is documented in its
 [dataset-format guide](https://docs.axolotl.ai/docs/dataset-formats/index.html),

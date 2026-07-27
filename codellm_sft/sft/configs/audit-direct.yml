@@ -19,6 +19,7 @@ datasets:
 
 val_set_size: 0
 seed: 42
+shuffle_merged_datasets: false
 
 sequence_len: 16384
 excess_length_strategy: raise
@@ -33,6 +34,7 @@ output_dir: ./outputs/label-audit/direct
 micro_batch_size: 1
 gradient_accumulation_steps: 1
 num_epochs: 1
+learning_rate: 0.0001
 
 bf16: true
 tf32: true

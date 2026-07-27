@@ -1,0 +1,158 @@
+{
+  "command": {
+    "ngram_size": 8,
+    "overfit_size": 32,
+    "pilot_size": 1000,
+    "seed": 42,
+    "sequence_length": 16384,
+    "test_size": 500,
+    "train_size": 10000,
+    "validation_size": 500
+  },
+  "counts": {
+    "decontamination": {
+      "clean_after_decontamination": 241283,
+      "removed_any_benchmark": 26906,
+      "removed_humaneval": 6953,
+      "removed_livecodebench": 16280,
+      "removed_mbpp": 6735,
+      "source_questions_shorter_than_ngram": 43
+    },
+    "eligible_after_length_filter": 240575,
+    "final_splits": {
+      "overfit": 32,
+      "pilot": 1000,
+      "test": 500,
+      "train": 10000,
+      "validation": 500
+    },
+    "overlength_removed": 708,
+    "source_filtering": {
+      "deduplicated_questions": 268189,
+      "duplicates_removed": 17,
+      "malformed_reasoning": 5,
+      "source_examples": 268211,
+      "source_train_parquet_files": 11,
+      "structurally_valid": 268206
+    }
+  },
+  "files": {
+    "data/decontamination_report.jsonl": {
+      "bytes": 9631936,
+      "sha256": "c0bcef8febf57e0fbba7562934c786ef1a0897b7acd5c3ed3c2b55ce24cea3a9"
+    },
+    "data/kodcode_direct.jsonl": {
+      "bytes": 17123379,
+      "sha256": "bbc83387f9e4d9daf798d4deea679aaa7d51334ddfe0fa71bf0a8aa7b5e01995"
+    },
+    "data/kodcode_reasoning.jsonl": {
+      "bytes": 174275588,
+      "sha256": "04e30532e0d2172ed2ea072e34a4c698cdf567d82175fe05b4d230c252bd4edc"
+    },
+    "data/selected_ids.json": {
+      "bytes": 348393,
+      "sha256": "ebe5da0b1dc8b45488a693a87cfe4a7d93902be665d23dbd9dc3acccc2ed1284"
+    },
+    "data/split_statistics.json": {
+      "bytes": 77990,
+      "sha256": "2e822c3662de889605bafacfd61384932371cd90f768920c7ca2c96517d22314"
+    },
+    "data/subsets/train-1000/kodcode_direct.jsonl": {
+      "bytes": 1755628,
+      "sha256": "a791a90abe8981a665fbe1cda488c3d1a8d6afd03ee679f63754ea7e3e7789e3"
+    },
+    "data/subsets/train-1000/kodcode_reasoning.jsonl": {
+      "bytes": 17407723,
+      "sha256": "2905d021b186211f5063aa4188ef3cdc2bd7a90a8b0a83c554364e1425fb784d"
+    },
+    "data/subsets/train-32/kodcode_direct.jsonl": {
+      "bytes": 69916,
+      "sha256": "d54f9697dcd262863c032f01ea47890ef2e5aa012d989891a04892093c9ecf27"
+    },
+    "data/subsets/train-32/kodcode_reasoning.jsonl": {
+      "bytes": 581610,
+      "sha256": "846d80a5db1972b8621786380766474065d18bb3ef4deaa0b13c9b64af942c17"
+    },
+    "data/test/private_tests.jsonl": {
+      "bytes": 657127,
+      "sha256": "82f86030f39160d1193d102e80f01157fb974b900479e4aaff66f3e02e4b6ac9"
+    },
+    "data/test/questions.jsonl": {
+      "bytes": 568348,
+      "sha256": "ef74cd7b8a697fe31c992aa35d611c8fafab3bf498f40074471f4cd52efd1a57"
+    },
+    "data/token_statistics.json": {
+      "bytes": 3781,
+      "sha256": "feba01796d71d2ad3ff8994ea9c34447c064b049637c2fe8134024fedb7ba876"
+    },
+    "data/validation/kodcode_direct.jsonl": {
+      "bytes": 857575,
+      "sha256": "82034a4f93ffa05218cf554254ac6c75f589b7e77e79cbb2c3d5762a9f2ab43b"
+    },
+    "data/validation/kodcode_reasoning.jsonl": {
+      "bytes": 9089548,
+      "sha256": "36d6dc2b978aad896b2b101852645dde2c8e9874c3fd6eca70be53aea138b418"
+    }
+  },
+  "packages": {
+    "datasets": "4.4.1",
+    "jinja2": "3.1.6",
+    "pyarrow": "25.0.0",
+    "transformers": "5.14.1"
+  },
+  "revisions": {
+    "base_model": {
+      "repo_id": "Qwen/Qwen3.5-4B-Base",
+      "revision": "1001bb4d826a52d1f399e183466143f4da7b741b"
+    },
+    "benchmarks": {
+      "humaneval": {
+        "config": "openai_humaneval",
+        "repo_id": "openai/openai_humaneval",
+        "revision": "7dce6050a7d6d172f3cc5c32aa97f52fa1a2e544",
+        "splits": [
+          "test"
+        ]
+      },
+      "livecodebench": {
+        "config": "release_v5",
+        "materialized_mirror": {
+          "repo_id": "lighteval/code_generation_lite",
+          "revision": "89e5fc5c2a8e748f50e95bc7235fab2372d49bfa"
+        },
+        "repo_id": "livecodebench/code_generation_lite",
+        "revision": "0fe84c3912ea0c4d4a78037083943e8f0c4dd505",
+        "splits": [
+          "test"
+        ]
+      },
+      "mbpp": {
+        "config": "full",
+        "repo_id": "google-research-datasets/mbpp",
+        "revision": "4bb6404fdc6cacfda99d4ac4205087b89d32030c",
+        "splits": [
+          "prompt",
+          "train",
+          "validation",
+          "test"
+        ]
+      }
+    },
+    "decontamination_reference": {
+      "path": "scripts/decontaminate.py",
+      "repo_id": "huggingface/open-r1",
+      "revision": "1416fa0cf21595d2083b399a2a0bbddd7f6e9563"
+    },
+    "source_dataset": {
+      "config": "default",
+      "repo_id": "KodCode/KodCode-V1-SFT-R1",
+      "revision": "26c8a11c800d71b6c4bafe12a92c9090ef0b6214",
+      "split": "train"
+    },
+    "tokenizer": {
+      "repo_id": "Qwen/Qwen3.5-4B-Base",
+      "revision": "1001bb4d826a52d1f399e183466143f4da7b741b"
+    }
+  },
+  "tokenizer_chat_template_sha256": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715"
+}

@@ -36,53 +36,57 @@ uv pip install --upgrade "evalplus[vllm] @ git+https://github.com/evalplus/evalp
 
 Running the HumanEval and MBPP benchmarks,
 
+Base Qwen model (about 30 mins)
+
 ```bash
 ./run_evalplus.sh \
   Qwen/Qwen3.5-4B-Base \
   results/qwen3.5-4b-base/evalplus
 ```
 
-Change the `MODEL` to `"Qwen/Qwen3.5-4B"` and `"/path/to/qwen3.5-4b-kodcode-sft"` to run evaluations on these models.
+Post trained Qwen model (about 30 mins)
+
+```bash
+./run_evalplus.sh \
+  "Qwen/Qwen3.5-4B" \
+  "results/qwen3.5-4b-post-trained/evalplus"
+```
+
+Change the `MODEL` to `"/path/to/qwen3.5-4b-kodcode-sft"` to run evaluations on for SFT models.
 
 > [!WARNING]
 > HumanEval and MBPP inference will be restricted to a 2048-token total context [^1].
 
 ### SkyThought Evals
 
+The current SkyThought LiveCodeBench task files use `release_v2` and pins vllm to `0.7.0`. I have created a fork that upgrades the vllm to `0.25.1` and uses `release_v5` for livecodebench yaml files.
+
 Install the library
 
 ```bash
-# Clone the repository
-git clone https://github.com/NovaSky-AI/SkyThought.git
-cd SkyThought
-
-# Create and activate a virtual environment (using uv here)
-uv venv --python 3.10
+uv venv --python 3.12
 source .venv/bin/activate
-
-# Install the package in editable mode
-uv pip install -e .
+uv pip install "skythought @ git+https://github.com/dudeperf3ct/SkyThought.git@feat/qwen35-livecodebench-v5"
 ```
-
-Configuring LiveCodeBench v5
-
-The current SkyThought LiveCodeBench task files use `release_v2`. To evaluate `v5`, update the task configurations:
-
-```diff
- dataset_kwargs:
--  version_tag: release_v2
-+  version_tag: release_v5
-```
-
-Apply this update to the overall, Easy, Medium and Hard LiveCodeBench YAML files.
 
 Run the LiveCodeBench benchmark,
+
+Base Qwen model (about 30 mins)
 
 ```bash
 ./run_skythought.sh \
   Qwen/Qwen3.5-4B-Base \
   results/qwen3.5-4b-base/livecodebench
 ```
+
+Post trained Qwen model (about 30 mins)
+
+```bash
+./run_skythought.sh \
+  "Qwen/Qwen3.5-4B" \
+  "results/qwen3.5-4b-post-trained/livecodebench"
+```
+
 
 There are multiple backends supported in the [official guide](https://github.com/NovaSky-AI/SkyThought/tree/main/skythought/evals). For example, `ray` backend on top of `vllm` is recommended for high throughput.
 

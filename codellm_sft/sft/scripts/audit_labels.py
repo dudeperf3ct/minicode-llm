@@ -37,6 +37,14 @@ class AuditConfig:
     eot_token: str
 
 
+@dataclass(frozen=True)
+class ExpectedExample:
+    example_id: str
+    messages: list[dict[str, str]]
+    final_content: str
+    reasoning: str | None = None
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config", type=Path)
@@ -101,73 +109,115 @@ def _audit_dataset(
 ) -> list[dict[str, int | str | bool]]:
     source_by_input = {}
     for source in source_rows:
-        messages = _expected_messages(source, config.variant)[1]
-        source_by_input[tuple(_render_ids(tokenizer, messages))] = source
+        expected = _expected_example(source, config.variant)
+        source_by_input[tuple(_render_ids(tokenizer, expected.messages))] = expected
 
     measurements = []
     for prepared_row in prepared:
         input_ids = tuple(_integer_list(prepared_row, "input_ids"))
-        source = source_by_input.pop(input_ids, None)
-        if source is None:
+        expected = source_by_input.pop(input_ids, None)
+        if expected is None:
             raise ValueError("Prepared input_ids do not match any source conversation")
-        measurements.append(_audit_row(config, source, prepared_row, tokenizer, eot_id))
+        measurements.append(_audit_row(config, expected, prepared_row, tokenizer, eot_id))
     return measurements
 
 
 def _audit_row(
     config: AuditConfig,
-    source: dict,
+    expected: ExpectedExample,
     prepared: dict,
     tokenizer: PreTrainedTokenizerBase,
     eot_id: int,
 ) -> dict[str, int | str | bool]:
-    example_id, messages, final_content, reasoning = _expected_messages(source, config.variant)
     input_ids = _integer_list(prepared, "input_ids")
     labels = _integer_list(prepared, "labels")
 
+    _audit_tokenization(config, expected, input_ids, labels, tokenizer)
+    assistant_eot = _audit_masking(expected, input_ids, labels, tokenizer, eot_id)
+    trainable = _audit_target(expected, labels, tokenizer)
+    return _measurement(expected, input_ids, labels, trainable, assistant_eot, tokenizer)
+
+
+def _audit_tokenization(
+    config: AuditConfig,
+    expected: ExpectedExample,
+    input_ids: list[int],
+    labels: list[int],
+    tokenizer: PreTrainedTokenizerBase,
+) -> None:
     if len(input_ids) != len(labels):
-        raise ValueError(f"{example_id}: input_ids and labels differ in length")
+        raise ValueError(f"{expected.example_id}: input_ids and labels differ in length")
     if len(input_ids) > config.sequence_length:
-        raise ValueError(f"{example_id}: sequence exceeds {config.sequence_length} tokens")
-    if input_ids != _render_ids(tokenizer, messages):
-        raise ValueError(f"{example_id}: input_ids differ from the pinned Qwen rendering")
+        raise ValueError(f"{expected.example_id}: sequence exceeds {config.sequence_length} tokens")
+    if input_ids != _render_ids(tokenizer, expected.messages):
+        raise ValueError(f"{expected.example_id}: input_ids differ from the pinned Qwen rendering")
     if any(
         label not in (IGNORE_TOKEN_ID, token_id)
         for token_id, label in zip(input_ids, labels, strict=True)
     ):
-        raise ValueError(f"{example_id}: labels must equal input_ids or -100")
+        raise ValueError(f"{expected.example_id}: labels must equal input_ids or -100")
 
-    dummy_messages = [messages[0], {"role": "assistant", "content": "[[dummy_message]]"}]
+
+def _audit_masking(
+    expected: ExpectedExample,
+    input_ids: list[int],
+    labels: list[int],
+    tokenizer: PreTrainedTokenizerBase,
+    eot_id: int,
+) -> int:
+    dummy_messages = [
+        expected.messages[0],
+        {"role": "assistant", "content": "[[dummy_message]]"},
+    ]
     expected_labels = _expected_labels(input_ids, _render_ids(tokenizer, dummy_messages), eot_id)
     if labels != expected_labels:
-        raise ValueError(f"{example_id}: labels differ from Axolotl's assistant-turn boundary")
+        raise ValueError(
+            f"{expected.example_id}: labels differ from Axolotl's assistant-turn boundary"
+        )
 
     eot_positions = [index for index, token_id in enumerate(input_ids) if token_id == eot_id]
     if len(eot_positions) != 2:
-        raise ValueError(f"{example_id}: expected two EOT tokens, found {len(eot_positions)}")
+        raise ValueError(
+            f"{expected.example_id}: expected two EOT tokens, found {len(eot_positions)}"
+        )
     user_eot, assistant_eot = eot_positions
     if labels[user_eot] != IGNORE_TOKEN_ID or labels[assistant_eot] != eot_id:
-        raise ValueError(f"{example_id}: user/assistant EOT masking is incorrect")
+        raise ValueError(f"{expected.example_id}: user/assistant EOT masking is incorrect")
     if any(label != IGNORE_TOKEN_ID for label in labels[assistant_eot + 1 :]):
-        raise ValueError(f"{example_id}: tokens after the assistant EOT are trainable")
+        raise ValueError(f"{expected.example_id}: tokens after the assistant EOT are trainable")
+    return assistant_eot
 
+
+def _audit_target(
+    expected: ExpectedExample, labels: list[int], tokenizer: PreTrainedTokenizerBase
+) -> list[int]:
     trainable = [label for label in labels if label != IGNORE_TOKEN_ID]
     if not trainable:
-        raise ValueError(f"{example_id}: no assistant tokens are trainable")
+        raise ValueError(f"{expected.example_id}: no assistant tokens are trainable")
     trainable_text = tokenizer.decode(trainable, skip_special_tokens=False)
-    if final_content.strip() not in trainable_text:
-        raise ValueError(f"{example_id}: final assistant content is not fully trainable")
-    if config.variant == "direct" and ("<think>" in trainable_text or "</think>" in trainable_text):
-        raise ValueError(f"{example_id}: direct labels contain thinking template tokens")
-    if config.variant == "reasoning" and reasoning not in trainable_text:
-        raise ValueError(f"{example_id}: reasoning is not fully trainable")
+    if expected.final_content.strip() not in trainable_text:
+        raise ValueError(f"{expected.example_id}: final assistant content is not fully trainable")
+    if expected.reasoning is None and ("<think>" in trainable_text or "</think>" in trainable_text):
+        raise ValueError(f"{expected.example_id}: direct labels contain thinking template tokens")
+    if expected.reasoning is not None and expected.reasoning not in trainable_text:
+        raise ValueError(f"{expected.example_id}: reasoning is not fully trainable")
+    return trainable
 
+
+def _measurement(
+    expected: ExpectedExample,
+    input_ids: list[int],
+    labels: list[int],
+    trainable: list[int],
+    assistant_eot: int,
+    tokenizer: PreTrainedTokenizerBase,
+) -> dict[str, int | str | bool]:
     opening = _single_token_id(tokenizer, "<think>")
     closing = _single_token_id(tokenizer, "</think>")
-    opening_index = _single_position(input_ids, opening, example_id)
-    closing_index = _single_position(input_ids, closing, example_id)
+    opening_index = _single_position(input_ids, opening, expected.example_id)
+    closing_index = _single_position(input_ids, closing, expected.example_id)
     return {
-        "id": example_id,
+        "id": expected.example_id,
         "total_tokens": len(input_ids),
         "trainable_tokens": len(trainable),
         "masked_tokens": len(input_ids) - len(trainable),
@@ -177,44 +227,43 @@ def _audit_row(
         "assistant_eot_index": assistant_eot,
         "thinking_open_trainable": labels[opening_index] != IGNORE_TOKEN_ID,
         "thinking_close_trainable": labels[closing_index] != IGNORE_TOKEN_ID,
-        "thinking_content_present": reasoning is not None,
+        "thinking_content_present": expected.reasoning is not None,
     }
 
 
-def _expected_messages(
-    row: dict, variant: str
-) -> tuple[str, list[dict[str, str]], str, str | None]:
-    example_id = row.get("id")
-    messages = row.get("messages")
-    if not isinstance(example_id, str) or not example_id:
-        raise ValueError("Source row is missing an id")
-    if not isinstance(messages, list) or len(messages) != 2:
-        raise ValueError(f"{example_id}: expected exactly two messages")
-    if [message.get("role") for message in messages] != ["user", "assistant"]:
-        raise ValueError(f"{example_id}: expected user then assistant")
-    if any(not isinstance(message.get("content"), str) for message in messages):
-        raise ValueError(f"{example_id}: message content must be strings")
-
-    target = messages[1]["content"]
+def _expected_example(row: dict, variant: str) -> ExpectedExample:
     if variant == "direct":
-        if "<think>" in target or "</think>" in target or "```" in target:
-            raise ValueError(f"{example_id}: direct target is not code-only")
-        return example_id, messages, target, None
+        return _expected_direct(row)
+    return _expected_reasoning(row)
 
-    if not target.startswith("<think>") or target.count("<think>") != 1:
-        raise ValueError(f"{example_id}: malformed opening reasoning delimiter")
-    if target.count("</think>") != 1:
-        raise ValueError(f"{example_id}: malformed closing reasoning delimiter")
-    closing = target.index("</think>")
-    reasoning = target[len("<think>") : closing].strip()
-    final_content = target[closing + len("</think>") :].lstrip()
+
+def _expected_direct(row: dict) -> ExpectedExample:
+    messages = row["messages"]
+    target = messages[1]["content"]
+    if "<think>" in target or "</think>" in target or "```" in target:
+        raise ValueError(f"{row['id']}: direct target is not code-only")
+    return ExpectedExample(example_id=row["id"], messages=messages, final_content=target)
+
+
+def _expected_reasoning(row: dict) -> ExpectedExample:
+    user_message, assistant_message = row["messages"]
+    target = assistant_message["content"]
+    if not target.startswith("<think>") or "</think>" not in target:
+        raise ValueError(f"{row['id']}: reasoning delimiters are missing")
+    reasoning, final_content = target.removeprefix("<think>").split("</think>", maxsplit=1)
+    reasoning = reasoning.strip()
+    final_content = final_content.lstrip()
     if not reasoning or not final_content:
-        raise ValueError(f"{example_id}: reasoning or final content is empty")
-    transformed = [
-        messages[0],
-        {"role": "assistant", "reasoning_content": reasoning, "content": final_content},
-    ]
-    return example_id, transformed, final_content, reasoning
+        raise ValueError(f"{row['id']}: reasoning or final content is empty")
+    return ExpectedExample(
+        example_id=row["id"],
+        messages=[
+            user_message,
+            {"role": "assistant", "reasoning_content": reasoning, "content": final_content},
+        ],
+        final_content=final_content,
+        reasoning=reasoning,
+    )
 
 
 def _build_report(
@@ -261,7 +310,19 @@ def _render_ids(tokenizer: PreTrainedTokenizerBase, messages: list[dict[str, str
         encoded = encoded["input_ids"]
     if encoded and isinstance(encoded[0], list):
         encoded = encoded[0]
-    return [int(token_id) for token_id in encoded]
+    input_ids = [int(token_id) for token_id in encoded]
+
+    # Axolotl keeps source newlines with assistant content, while Qwen's Jinja
+    # rendering trims them immediately before the end-of-turn token.
+    content = messages[-1]["content"]
+    trailing_newlines = content[len(content.rstrip("\n")) :]
+    if trailing_newlines:
+        eot_id = _single_token_id(tokenizer, "<|im_end|>")
+        eot_index = len(input_ids) - 1 - input_ids[::-1].index(eot_id)
+        newline_ids = tokenizer(trailing_newlines, add_special_tokens=False)["input_ids"]
+        if input_ids[eot_index - len(newline_ids) : eot_index] != newline_ids:
+            input_ids[eot_index:eot_index] = newline_ids
+    return input_ids
 
 
 def _single_token_id(tokenizer: PreTrainedTokenizerBase, token: str) -> int:

@@ -243,9 +243,11 @@ set -o pipefail
 ) 2>&1 | tee logs/label-audit/reasoning.log
 ```
 
-The auditor matches prepared rows to source conversations by their rendered token sequence, so Axolotl's preprocessing order does not affect the audit. It checks every prepared row, records safe summaries for five examples by default, and fails on template, masking, target, reasoning, length, or EOT drift. It writes reports under `reports/label-audit/`; it does not modify `data/token_statistics.json`.
+The auditor matches prepared rows to source conversations by their rendered token sequence, so Axolotl's preprocessing order does not affect the audit. It checks every prepared row, records safe summaries for five examples by default, and fails on template, masking, target, reasoning, length, or EOT drift. It writes reports under `reports/label-audit/`.
 
 The pinned official template renders direct assistant turns as `<think>\n\n</think>\n\n<code>` even though the direct source target contains only `r1_solution`. Axolotl's assistant-turn boundary treats that empty block as template text, so its tokens remain masked while the code and assistant EOT are trainable. The audit requires this exact behavior rather than replacing the official template.
+
+The auditor also preserves trailing newlines in assistant content. This follows Axolotl's content-boundary rule that newlines stay with the preceding content rather than being discarded by template whitespace trimming.
 
 Axolotl's dataset and CLI behavior used here is documented in its
 [dataset-format guide](https://docs.axolotl.ai/docs/dataset-formats/index.html),
@@ -268,12 +270,9 @@ The four explicit configurations are:
 - `configs/direct-fft.yml`
 - `configs/reasoning-fft.yml`
 
-Each configuration reads `train` and `validation` directly from the immutable
-dataset revision. Prepared datasets, outputs, and W&B run names are unique.
-Hub model upload remains disabled during training.
+Each configuration reads `train` and `validation` directly from the immutable dataset revision. Prepared datasets, outputs, and W&B run names are unique. Hub model upload remains disabled during training.
 
-Within either training method, direct and reasoning differ only in target
-selection and run identity:
+Within either training method, direct and reasoning differ only in target selection and run identity:
 
 ```diff
 - name: direct

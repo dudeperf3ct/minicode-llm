@@ -229,17 +229,17 @@ mkdir -p logs/label-audit
 set -o pipefail
 
 (
-  axolotl preprocess configs/audit-direct.yml \
+  axolotl preprocess configs/audit/direct.yml \
     --debug \
     --debug-num-examples 5 \
-  && python scripts/audit_labels.py configs/audit-direct.yml
+  && python scripts/audit_labels.py configs/audit/direct.yml
 ) 2>&1 | tee logs/label-audit/direct.log
 
 (
-  axolotl preprocess configs/audit-reasoning.yml \
+  axolotl preprocess configs/audit/reasoning.yml \
     --debug \
     --debug-num-examples 5 \
-  && python scripts/audit_labels.py configs/audit-reasoning.yml
+  && python scripts/audit_labels.py configs/audit/reasoning.yml
 ) 2>&1 | tee logs/label-audit/reasoning.log
 ```
 
@@ -253,6 +253,69 @@ Axolotl's dataset and CLI behavior used here is documented in its
 [dataset-format guide](https://docs.axolotl.ai/docs/dataset-formats/index.html),
 [conversation guide](https://docs.axolotl.ai/docs/dataset-formats/conversation.html),
 and [CLI arguments](https://docs.axolotl.ai/docs/api/cli.args.html).
+
+## Staged Training Configurations
+
+The configuration layout mirrors the experiment stages:
+
+```text
+configs/
+├── audit/
+│   ├── direct.yml
+│   └── reasoning.yml
+├── overfit/
+│   ├── direct-lora.yml
+│   ├── reasoning-lora.yml
+│   └── direct-fft.yml
+├── pilot/
+│   ├── direct-lora.yml
+│   ├── reasoning-lora.yml
+│   ├── direct-fft.yml
+│   └── reasoning-fft.yml
+├── direct-lora.yml
+├── reasoning-lora.yml
+├── direct-fft.yml
+└── reasoning-fft.yml
+```
+
+The overfit LoRA runs use the 32-example `overfit` split for 100 optimizer
+steps with gradient accumulation disabled. The direct full-FT smoke test runs
+for five optimizer steps. Run them sequentially:
+
+```bash
+mkdir -p logs/overfit
+set -o pipefail
+
+axolotl train configs/overfit/direct-lora.yml \
+  2>&1 | tee logs/overfit/direct-lora.log
+
+axolotl train configs/overfit/reasoning-lora.yml \
+  2>&1 | tee logs/overfit/reasoning-lora.log
+
+axolotl train configs/overfit/direct-fft.yml \
+  2>&1 | tee logs/overfit/direct-fft.log
+```
+
+After the Phase 0 acceptance checks pass, run the four one-epoch 1K pilots:
+
+```bash
+mkdir -p logs/pilot
+
+axolotl train configs/pilot/direct-lora.yml \
+  2>&1 | tee logs/pilot/direct-lora.log
+
+axolotl train configs/pilot/reasoning-lora.yml \
+  2>&1 | tee logs/pilot/reasoning-lora.log
+
+axolotl train configs/pilot/direct-fft.yml \
+  2>&1 | tee logs/pilot/direct-fft.log
+
+axolotl train configs/pilot/reasoning-fft.yml \
+  2>&1 | tee logs/pilot/reasoning-fft.log
+```
+
+Every stage has distinct prepared-data, output, and W&B run paths. The root
+configuration files remain the two-epoch 10K main experiment.
 
 ## Main 10K Configurations
 

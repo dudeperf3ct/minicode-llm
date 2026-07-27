@@ -7,19 +7,19 @@ until it was produced by the pinned H100 environment.
 Run the commands from `sft/`:
 
 ```bash
-axolotl preprocess configs/audit-direct.yml \
+axolotl preprocess configs/audit/direct.yml \
   --debug \
   --debug-num-examples 5
 
-uv run python scripts/audit_labels.py configs/audit-direct.yml
+uv run python scripts/audit_labels.py configs/audit/direct.yml
 ```
 
 ```bash
-axolotl preprocess configs/audit-reasoning.yml \
+axolotl preprocess configs/audit/reasoning.yml \
   --debug \
   --debug-num-examples 5
 
-uv run python scripts/audit_labels.py configs/audit-reasoning.yml
+uv run python scripts/audit_labels.py configs/audit/reasoning.yml
 ```
 
 The first command in each pair exposes Axolotl's debug rendering for manual

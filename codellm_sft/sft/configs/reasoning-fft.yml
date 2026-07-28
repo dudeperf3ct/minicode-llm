@@ -38,14 +38,17 @@ test_datasets:
 seed: 42
 dataset_prepared_path: ./prepared/p2-10k-reasoning-fft-s42
 output_dir: ./outputs/p2-10k-reasoning-fft-s42
+hub_model_id: dudeperf3ct/qwen35-4b-kodcode-sft-10k
+hub_revision: reasoning-fft
+hub_strategy: checkpoint
 
 sequence_len: 16384
 excess_length_strategy: raise
 sample_packing: false
 pad_to_sequence_len: false
 
-micro_batch_size: 1
-gradient_accumulation_steps: 16
+micro_batch_size: 2
+gradient_accumulation_steps: 4
 num_epochs: 2
 
 bf16: true

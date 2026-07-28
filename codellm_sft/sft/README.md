@@ -18,11 +18,17 @@ Dataset preparation, split design, provenance, Hub publication, and source refer
 
 ## H100 Training Environment
 
-The Lambda Labs `1 x H100` machine configuration used for running experiments is the following:
+Lambda Cloud prices observed on July 28, 2026:
 
-- NVIDIA H100 80 GB HBM3 SXM5;
-- 26 vCPUs and 225 GiB RAM;
-- 2.8 TiB SSD;
+| Instance | vCPUs | RAM | SSD | Price/GPU/hour | Price/instance/hour |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1 x H100 SXM5 80 GB | 26 | 225 GiB | 2.75 TiB | $4.29 | $4.29 |
+| 2 x H100 SXM5 80 GB | 52 | 450 GiB | 5.5 TiB | $4.19 | $8.38 |
+
+The 1K pilots used the single-GPU instance. The four 10K runs use the two-GPU instance.
+
+The observed software environment is:
+
 - NVIDIA driver `580.105.08`;
 - driver-supported CUDA `13.0`;
 - installed CUDA compiler toolkit `12.8`.
@@ -119,7 +125,7 @@ flash_attention_3`. FlashAttention-3 benchmarks show a `1.5-2.0x` forward and `1
 
 See the [Axolotl attention documentation](https://docs.axolotl.ai/docs/attention.html#flash-attention-3) and the [FlashAttention-3 paper](https://tridao.me/publications/flash3/flash3.pdf).
 
-Flash Linear Attention `0.4.1`, installed with Axolotl, accelerates Qwen3.5's Gated DeltaNet layers and is separate from FlashAttention-3. Sample packing remains disabled. DeepSpeed is installed through Axolotl's documented extra but will not be enabled for the single-H100 runs.
+Flash Linear Attention `0.4.1`, installed with Axolotl, accelerates Qwen3.5's Gated DeltaNet layers and is separate from FlashAttention-3. Sample packing remains disabled. DeepSpeed is installed through Axolotl's documented extra but is not enabled because every 4B pilot fit on one 80 GB H100.
 
 > [!NOTE]
 > The dataset repository and immutable revision are documented in [`data/README.md`](data/README.md).
@@ -234,7 +240,10 @@ The four explicit configurations are:
 - `configs/direct-fft.yml`
 - `configs/reasoning-fft.yml`
 
-Each configuration reads `train` and `validation` directly from the immutable dataset revision. Prepared datasets, outputs, and W&B run names are unique. Hub model upload remains disabled during training.
+Each configuration reads `train` and `validation` directly from the immutable dataset revision. Prepared datasets, outputs, W&B run names, and Hub branches
+are unique.
+
+All checkpoints are pushed to the `dudeperf3ct/qwen35-4b-kodcode-sft-10k` model repository.
 
 Within either training method, direct and reasoning differ only in target selection and run identity:
 
@@ -246,10 +255,12 @@ Within either training method, direct and reasoning differ only in target select
 
 - dataset_prepared_path: ./prepared/p2-10k-direct-<method>-s42
 - output_dir: ./outputs/p2-10k-direct-<method>-s42
+- hub_revision: direct-<method>
 - wandb_name: main-10k-direct-<method>-seed42
 - wandb_run_id: main-10k-direct-<method>-seed42
 + dataset_prepared_path: ./prepared/p2-10k-reasoning-<method>-s42
 + output_dir: ./outputs/p2-10k-reasoning-<method>-s42
++ hub_revision: reasoning-<method>
 + wandb_name: main-10k-reasoning-<method>-seed42
 + wandb_run_id: main-10k-reasoning-<method>-seed42
 ```
@@ -264,10 +275,14 @@ settings and run identity:
 - lora_alpha: 128
 - lora_dropout: 0.05
 - lora_target_modules: <language-model-only regex>
+- micro_batch_size: 4
+- gradient_accumulation_steps: 2
 + learning_rate: 0.00001
 + unfrozen_parameters:
 +   - model.language_model.*
 +   - lm_head.*
++ micro_batch_size: 2
++ gradient_accumulation_steps: 4
 
 - dataset_prepared_path: ./prepared/p2-10k-<target>-lora-s42
 - output_dir: ./outputs/p2-10k-<target>-lora-s42
@@ -279,19 +294,30 @@ settings and run identity:
 + wandb_run_id: main-10k-<target>-fft-seed42
 ```
 
-Verified final weights will later use:
+## Run 10K on Two H100s
 
-- `dudeperf3ct/qwen35-4b-base-kodcode-10k-direct-lora`
-- `dudeperf3ct/qwen35-4b-base-kodcode-10k-reasoning-lora`
-- `dudeperf3ct/qwen35-4b-base-kodcode-10k-direct-fft`
-- `dudeperf3ct/qwen35-4b-base-kodcode-10k-reasoning-fft`
+Run one experiment at a time across both GPUs with DDP. Axolotl uses DDP by default when neither DeepSpeed nor FSDP is configured. Each run retains a global batch size of 16:
+
+| Method | Pilot peak, 1 GPU | Microbatch/GPU | Accumulation | GPUs | Global batch |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| LoRA | 16.71 GiB | 4 | 2 | 2 | 16 |
+| Full FT | 41.07 GiB | 2 | 4 | 2 | 16 |
+
+The peaks are the worst observed values across the direct and reasoning 1K pilots. A simple fixed-state plus linearly scaled activation estimate puts the new worst cases near 37 GiB for LoRA and 58 GiB for full FT per GPU. These are planning estimates, not memory guarantees.
+
+> [!NOTE]
+> See Axolotl's [multi-GPU guide](https://docs.axolotl.ai/docs/multi-gpu.html), [CLI launcher documentation](https://docs.axolotl.ai/docs/cli.html), and the Transformers [effective batch-size definition](https://huggingface.co/docs/transformers/main_classes/trainer).
+
+Based on the single-H100 pilot runtimes, ideal two-GPU scaling projects roughly 4.5-5 hours for each direct run and 19 hours for each reasoning run. Sequential execution therefore starts near 47 hours, or about $394 at $8.38/hour, before accounting for DDP efficiency and the larger microbatches.
 
 ## Held-Out Test Evaluation
 
 Run the untouched 500-example test split only after the four 10K runs and all training decisions are final. The test evaluator uses the same greedy decoding, 16,384-token generation limit, Qwen3.5 chat template, and private tests for all four checkpoints. It loads the immutable dataset revision from `manifests/evaluation.json`.
 
 Direct requests set `enable_thinking: false`; reasoning requests set it to `true`.
-The editable project install includes the pinned `pytest` runner used for private tests.
+
+The editable project install includes the pinned `pytest` runner used for
+private tests.
 
 Merge both LoRA adapters before evaluation:
 
@@ -332,6 +358,7 @@ Stop the server, serve the next checkpoint, and use the matching evaluation comm
 | Reasoning full FT | `outputs/p2-10k-reasoning-fft-s42` | `--config configs/reasoning-fft.yml` |
 
 Each run writes resumable per-example results to `reports/test/<wandb-run-id>/results.jsonl` and aggregate metrics to `reports/test/<wandb-run-id>/summary.json`. The summary includes pass rate overall and by difficulty/subset/style, average output tokens, thinking and final-code rates, truncations, extraction failures, syntax errors, test timeouts, and API errors.
+
 Rows that ended with `api_error` are retried on the next invocation; completed model outputs and test results are reused.
 
 Once evaluation completes, the same script reopens the completed W&B

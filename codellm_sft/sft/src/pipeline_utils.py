@@ -1,26 +1,30 @@
-"""Shared primitives for the matched KodCode preparation pipeline.
+"""Shared local primitives for the matched KodCode preparation pipeline.
 
 The preparation scripts use these helpers to keep hashing, normalization,
-revision checks, batching, and Qwen chat-template rendering consistent across
-source filtering, decontamination, statistics, and uploads.
+manifest verification, batching, and Qwen chat-template rendering consistent
+across source filtering, decontamination, statistics, and uploads.
 """
 
 from __future__ import annotations
 
 import hashlib
-import json
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
 
-from huggingface_hub import HfApi
+from json_utils import read_json
 
 if TYPE_CHECKING:
     from transformers import PreTrainedTokenizerBase
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 REVISIONS_PATH = PROJECT_DIR / "manifests" / "revisions.json"
+DEFAULT_TRAIN_SIZE = 10_000
+VALIDATION_SIZE = 500
+TEST_SIZE = 500
+PILOT_SIZE = 1_000
+OVERFIT_SIZE = 32
 STRATIFICATION_FIELDS = ("gpt_difficulty", "subset", "style")
 SOURCE_COLUMNS = [
     "style",
@@ -81,6 +85,15 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def verify_file(path: Path, expected: dict[str, Any], label: str) -> None:
+    if not path.is_file():
+        raise FileNotFoundError(f"Missing file: {label}")
+    if path.stat().st_size != expected["bytes"]:
+        raise RuntimeError(f"Size mismatch for {label}")
+    if sha256_file(path) != expected["sha256"]:
+        raise RuntimeError(f"Checksum mismatch for {label}")
+
+
 def batched(values: list[Any], size: int) -> Iterator[list[Any]]:
     for index in range(0, len(values), size):
         yield values[index : index + size]
@@ -90,9 +103,7 @@ def render_batch(tokenizer: PreTrainedTokenizerBase, conversations: list[Message
     """Render conversations with the pinned model's native chat template."""
 
     rendered = tokenizer.apply_chat_template(
-        conversations,
-        tokenize=False,
-        add_generation_prompt=False,
+        conversations, tokenize=False, add_generation_prompt=False
     )
     if isinstance(rendered, str):
         if len(conversations) != 1:
@@ -114,7 +125,7 @@ def token_lengths(tokenizer: PreTrainedTokenizerBase, rendered: list[str]) -> li
 
 
 def load_revisions() -> dict[str, Any]:
-    revisions = json.loads(REVISIONS_PATH.read_text(encoding="utf-8"))
+    revisions = read_json(REVISIONS_PATH)
     required = {
         "base_model",
         "benchmarks",
@@ -126,12 +137,6 @@ def load_revisions() -> dict[str, Any]:
     if missing:
         raise ValueError(f"Missing revision entries: {sorted(missing)}")
     return revisions
-
-
-def assert_hub_revision(repo_id: str, revision: str, repo_type: str) -> None:
-    info = HfApi().repo_info(repo_id=repo_id, repo_type=repo_type, revision=revision)
-    if info.sha != revision:
-        raise RuntimeError(f"{repo_id} resolved to {info.sha}, expected {revision}")
 
 
 def candidate_ids(candidates: list[Candidate]) -> list[str]:

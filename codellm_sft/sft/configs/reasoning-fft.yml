@@ -77,3 +77,4 @@ use_wandb: true
 wandb_entity: dudeperf3ct
 wandb_project: qwen35-4b-kodcode-sft
 wandb_name: main-10k-reasoning-fft-seed42
+wandb_run_id: main-10k-reasoning-fft-seed42

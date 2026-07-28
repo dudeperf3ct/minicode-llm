@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from statistics import median
 from typing import Any
 
-import pipeline_utils as utils
+from pipeline_utils import Candidate
 
 
 @dataclass
@@ -60,7 +60,7 @@ def add_reasoning_ratios(token_statistics: dict[str, Any]) -> None:
         statistics["reasoning_to_direct_assistant_token_ratio"] = reasoning_tokens / direct_tokens
 
 
-def stratum_counts(candidates: list[utils.Candidate]) -> list[dict[str, Any]]:
+def stratum_counts(candidates: list[Candidate]) -> list[dict[str, Any]]:
     counts = Counter(candidate.stratum for candidate in candidates)
     return [
         {

@@ -11,11 +11,12 @@ from importlib import metadata
 from pathlib import Path
 from typing import Any
 
-import data_pipeline
-import data_statistics
-import data_writer
-import pipeline_utils as utils
 from transformers import PreTrainedTokenizerBase
+
+import data_pipeline
+import pipeline_utils as utils
+from data_statistics import stratum_counts
+from json_utils import write_json
 
 
 def write_selected_ids(
@@ -33,13 +34,13 @@ def write_selected_ids(
         **selection.split_allocations,
     }
     ordered_ids = {
-        "overfit_32": utils.candidate_ids(selection.overfit),
-        "pilot_1000": utils.candidate_ids(selection.pilot),
+        f"overfit_{utils.OVERFIT_SIZE}": utils.candidate_ids(selection.overfit),
+        f"pilot_{utils.PILOT_SIZE}": utils.candidate_ids(selection.pilot),
         "test": utils.candidate_ids(selection.test),
         "train": utils.candidate_ids(selection.train),
         "validation": utils.candidate_ids(selection.validation),
     }
-    data_writer.write_json(
+    write_json(
         output_dir / "selected_ids.json",
         {
             "allocations": _serialize_allocation(_stratum_capacities(candidates), allocations),
@@ -66,7 +67,7 @@ def write_split_statistics(
 ) -> None:
     named_splits = selection.all_named_splits()
     split_statistics = {
-        split: {"examples": len(items), "strata": data_statistics.stratum_counts(items)}
+        split: {"examples": len(items), "strata": stratum_counts(items)}
         for split, items in named_splits.items()
     }
     nested_allocations = {
@@ -77,7 +78,7 @@ def write_split_statistics(
             _stratum_capacities(selection.train), {"pilot": selection.pilot_allocation}
         ),
     }
-    data_writer.write_json(
+    write_json(
         output_dir / "split_statistics.json",
         {
             "benchmark_audit": benchmark_audit,
@@ -125,7 +126,7 @@ def write_data_manifest(
         package: metadata.version(package)
         for package in ("datasets", "jinja2", "pyarrow", "transformers")
     }
-    data_writer.write_json(
+    write_json(
         manifest_path,
         {
             "command": command,

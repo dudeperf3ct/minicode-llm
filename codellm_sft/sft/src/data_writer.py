@@ -6,16 +6,17 @@ their token lengths, writes paired JSONL in identical ID order, and keeps
 held-out tests separate from assistant targets.
 """
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, TextIO
 
+from datasets import Dataset
+from transformers import PreTrainedTokenizerBase
+
 import data_pipeline
 import data_statistics
 import pipeline_utils as utils
-from datasets import Dataset
-from transformers import PreTrainedTokenizerBase
+from json_utils import write_json, write_jsonl, write_jsonl_line
 
 
 @dataclass(frozen=True)
@@ -44,29 +45,6 @@ class PairedHandles:
     reasoning: TextIO
 
 
-def write_json(path: Path, value: Any) -> None:
-    """Write deterministic, human-readable JSON."""
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
-
-
-def write_jsonl(path: Path, records: list[dict[str, Any]]) -> None:
-    """Write canonical JSONL records."""
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        for record in records:
-            _write_jsonl_line(handle, record)
-
-
-def _write_jsonl_line(handle: TextIO, value: Any) -> None:
-    handle.write(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
-    handle.write("\n")
-
-
 def _paired_output_paths(output_dir: Path) -> dict[str, PairedPaths]:
     return {
         "train": PairedPaths(
@@ -78,12 +56,18 @@ def _paired_output_paths(output_dir: Path) -> dict[str, PairedPaths]:
             reasoning=output_dir / "validation" / "kodcode_reasoning.jsonl",
         ),
         "pilot": PairedPaths(
-            direct=output_dir / "subsets" / "train-1000" / "kodcode_direct.jsonl",
-            reasoning=output_dir / "subsets" / "train-1000" / "kodcode_reasoning.jsonl",
+            direct=output_dir / "subsets" / f"train-{utils.PILOT_SIZE}" / "kodcode_direct.jsonl",
+            reasoning=output_dir
+            / "subsets"
+            / f"train-{utils.PILOT_SIZE}"
+            / "kodcode_reasoning.jsonl",
         ),
         "overfit": PairedPaths(
-            direct=output_dir / "subsets" / "train-32" / "kodcode_direct.jsonl",
-            reasoning=output_dir / "subsets" / "train-32" / "kodcode_reasoning.jsonl",
+            direct=output_dir / "subsets" / f"train-{utils.OVERFIT_SIZE}" / "kodcode_direct.jsonl",
+            reasoning=output_dir
+            / "subsets"
+            / f"train-{utils.OVERFIT_SIZE}"
+            / "kodcode_reasoning.jsonl",
         ),
     }
 
@@ -247,10 +231,10 @@ def _record_measurement(
         raise RuntimeError(f"Overlength selected example: {candidate.question_id}")
 
     if handles is not None:
-        _write_jsonl_line(
+        write_jsonl_line(
             handles.direct, {"id": candidate.question_id, "messages": measured.direct_messages}
         )
-        _write_jsonl_line(
+        write_jsonl_line(
             handles.reasoning,
             {"id": candidate.question_id, "messages": measured.reasoning_messages},
         )

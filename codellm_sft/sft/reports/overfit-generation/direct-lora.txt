@@ -1,0 +1,234 @@
+Loading weights:   0%|          | 0/723 [00:00<?, ?it/s]Loading weights:   0%|          | 1/723 [00:00<01:30,  7.93it/s]Loading weights:   6%|▌         | 42/723 [00:00<00:03, 221.19it/s]Loading weights:  12%|█▏        | 89/723 [00:00<00:01, 321.93it/s]Loading weights:  18%|█▊        | 129/723 [00:00<00:01, 350.23it/s]Loading weights:  23%|██▎       | 168/723 [00:00<00:01, 363.33it/s]Loading weights:  28%|██▊       | 206/723 [00:00<00:01, 359.33it/s]Loading weights:  35%|███▍      | 253/723 [00:00<00:01, 389.65it/s]Loading weights:  41%|████      | 293/723 [00:00<00:01, 387.40it/s]Loading weights:  47%|████▋     | 340/723 [00:00<00:00, 402.19it/s]Loading weights:  53%|█████▎    | 382/723 [00:01<00:00, 399.05it/s]Loading weights:  58%|█████▊    | 422/723 [00:01<00:00, 387.18it/s]Loading weights:  95%|█████████▍| 684/723 [00:01<00:00, 1031.03it/s]Loading weights: 100%|██████████| 723/723 [00:01<00:00, 557.87it/s]
+
+================================================================================
+ID: Docs: Python310_29906_C
+import requests
+from unittest.mock import patch, Mock
+import pytest
+
+def fetch_data(url):
+    """
+    Fetches data from the given URL. If the request is successful, returns
+    the JSON response. If the request encounters an HTTP error, raises an
+    exception with the error message.
+
+    Args:
+        url (str): The URL to fetch data from.
+
+    Returns:
+        dict: The JSON response from the server.
+
+    Raises:
+        Exception: If the request fails with an HTTP error.
+    """
+    response = requests.get(url)
+    response.raise_for_status()
+    return response.json()
+
+def test_fetch_data_success():
+    """
+    Test that fetch_data function successfully returns JSON data when
+    the request is successful.
+    """
+    url = "https://api.example.com/data"
+    mock_response = Mock()
+    expected_data = {"key": "value"}
+    mock_response.json.return_value = expected_data
+    mock_response.raise_for_status.return_value = None
+
+    with patch('requests.get', return_value=mock_response) as mock_get:
+        response_data = fetch_data(url)
+        mock_get.assert_called_once_with(url)
+        assert response_data == expected_data, "Response data does not match expected data"
+
+def test_fetch_data_failure():
+    """
+    Test that fetch_data function raises an exception when the request
+    encounters an HTTP error.
+    """
+    url = "https://api.example.com/error"
+    mock_response = Mock()
+    error_message = "HTTP Error occurred"
+    mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError(error_message)
+
+    with patch('requests.get', return_value=mock_response) as mock_get:
+        with pytest.raises(requests.exceptions.HTTPError, match=error_message):
+            fetch_data(url)
+        mock_get.assert_called_once_with(url)
+<|im_end|>
+
+================================================================================
+ID: Taco_26229_C
+from typing import List, Tuple
+from collections import Counter
+import itertools
+
+def find_kth_smallest_palindrome(S: str, K: int) -> str:
+    counts = list(Counter(S).items())
+    total_length = len(S)
+    max_len = total_length
+    min_len = 1 if total_length % 2 == 0 else 2
+
+    # Generate all possible palindromes of even and odd lengths
+    even_palindromes = set()
+    odd_palindromes = set()
+
+    # Even length palindromes
+    for half_len in range(0, total_length // 2 + 1):
+        remaining = total_length - 2 * half_len
+        if remaining < 0:
+            continue
+        # Create a multiset of characters for the half
+        half_counts = {c: cnt for c, cnt in counts}
+        # Remove characters for the remaining positions
+        for c, cnt in half_counts.items():
+            if cnt < remaining:
+                continue
+            # Generate all unique permutations of the half
+            chars = []
+            for c in counts:
+                for _ in range(c[1]):
+                    chars.append(c[0])
+            # Generate unique permutations
+            unique_perms = set(itertools.permutations(chars, half_len))
+            for p in unique_perms:
+                left = ''.join(p)
+                palindrome = left + left[::-1]
+                even_palindromes.add(palindrome)
+
+    # Odd length palindromes
+    for half_len in range(0, (total_length - 1) // 2 + 1):
+        remaining = total_length - 2 * half_len - 1
+        if remaining < 0:
+            continue
+        # Create a multiset of characters for the half
+        half_counts = {c: cnt for c, cnt in counts}
+        # Remove characters for the remaining positions
+        for c, cnt in half_counts.items():
+            if cnt < remaining:
+                continue
+            # Generate all unique permutations of the half
+            chars = []
+            for c in counts:
+                for _ in range(c[1]):
+                    chars.append(c[0])
+            # Generate unique permutations
+            unique_perms = set(itertools.permutations(chars, half_len))
+            for p in unique_perms:
+                left = ''.join(p)
+                palindrome = left + counts[0][0] + left[::-1]
+                odd_palindromes.add(palindrome)
+
+    # Combine all palindromes
+    all_palindromes = even_palindromes | odd_palindromes
+
+    # Sort lexicographically
+    sorted_palindromes = sorted(all_palindromes)
+
+    # Check if K is within range
+    if K <= len(sorted_palindromes):
+        return sorted_palindromes[K-1]
+    else:
+        return "NO"
+
+def solve(test_cases: List[Tuple[str, int]]) -> List[str]:
+    results = []
+    for case in test_cases:
+        S, K = case
+        results.append(find_kth_smallest_palindrome(S, K))
+    return results<|im_end|>
+
+================================================================================
+ID: Leetcode_12001_C
+from typing import List
+from collections import deque
+
+def largest_region(grid: List[List[int]], threshold: int) -> int:
+    if not grid or not grid[0]:
+        return 0
+
+    rows = len(grid)
+    cols = len(grid[0])
+    visited = [[False for _ in range(cols)] for _ in range(rows)]
+    directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+    max_size = 0
+
+    queue = deque()
+
+    for i in range(rows):
+        for j in range(cols):
+            if grid[i][j] > threshold:
+                continue
+            if not visited[i][j]:
+                visited[i][j] = True
+                queue.append((i, j))
+                current_size = 1
+
+                while queue:
+                    x, y = queue.popleft()
+                    for dx, dy in directions:
+                        nx, ny = x + dx, y + dy
+                        if 0 <= nx < rows and 0 <= ny < cols:
+                            if not visited[nx][ny] and grid[nx][ny] <= threshold:
+                                visited[nx][ny] = True
+                                queue.append((nx, ny))
+                                current_size += 1
+
+                if current_size > max_size:
+                    max_size = current_size
+
+    return max_size<|im_end|>
+
+================================================================================
+ID: Taco_67737_C
+from typing import List, Tuple
+
+def find_subsets(N: int) -> List[Tuple[int, ...]]:
+    """
+    Given a positive integer N, return all the possible combinations of unique subsets of integers that sum up to N.
+    The subsets should be in lexicographical order.
+
+    Args:
+        N (int): The target sum.
+
+    Returns:
+        List[Tuple[int, ...]]: A list of tuples, each representing a subset of integers summing to N, in lexicographical order.
+    """
+    result = []
+    backtrack(1, [], N, result)
+    return result
+
+def backtrack(start: int, current: List[int], remaining: int, result: List[Tuple[int, ...]]) -> None:
+    if remaining == 0:
+        result.append(tuple(current))
+        return
+    for i in range(start, remaining + 1):
+        current.append(i)
+        backtrack(i, current, remaining - i, result)
+        current.pop()
+<|im_end|>
+
+================================================================================
+ID: Algorithm_23775_I
+class Library:
+    def __init__(self):
+        self.title_dict = {}
+        self.author_dict = {}
+
+    def insert(self, title: str, author: str, year: int) -> None:
+        book = {
+            'title': title,
+            'author': author,
+            'year': year
+        }
+        self.title_dict[title] = book
+        if author in self.author_dict:
+            self.author_dict[author].append(book)
+        else:
+            self.author_dict[author] = [book]
+
+    def query_by_title(self, title: str) -> dict:
+        return self.title_dict.get(title, {})
+
+    def list_by_author(self, author: str) -> list:
+        return self.author_dict.get(author, [])<|im_end|>

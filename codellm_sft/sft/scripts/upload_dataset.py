@@ -7,14 +7,16 @@ detailed decontamination report are intentionally never staged for upload.
 """
 
 import argparse
-import json
 import shutil
 import tempfile
 from pathlib import Path
 from typing import Any
 
-import pipeline_utils as utils
 from huggingface_hub import HfApi
+
+from hub_utils import upload_dataset_folder
+from json_utils import read_json
+from pipeline_utils import PROJECT_DIR, verify_file
 
 PAYLOAD_FILES = {
     "direct/train.jsonl": "data/kodcode_direct.jsonl",
@@ -51,24 +53,21 @@ def verify_payload(manifest: dict[str, Any]) -> None:
 
     manifest_files = manifest["files"]
     for source in PAYLOAD_FILES.values():
-        path = utils.PROJECT_DIR / source
-        if not path.is_file():
-            raise FileNotFoundError(f"Missing upload source: {path}")
+        path = PROJECT_DIR / source
         if source.startswith("data/"):
             expected = manifest_files.get(source)
             if expected is None:
                 raise RuntimeError(f"{source} is absent from the data manifest")
-            if path.stat().st_size != expected["bytes"]:
-                raise RuntimeError(f"Size mismatch for {source}")
-            if utils.sha256_file(path) != expected["sha256"]:
-                raise RuntimeError(f"Checksum mismatch for {source}")
+            verify_file(path, expected, source)
+        elif not path.is_file():
+            raise FileNotFoundError(f"Missing upload source: {path}")
 
 
 def stage_payload(staging_dir: Path, manifest: dict[str, Any]) -> None:
     for destination, source in PAYLOAD_FILES.items():
         target = staging_dir / destination
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(utils.PROJECT_DIR / source, target)
+        shutil.copyfile(PROJECT_DIR / source, target)
     (staging_dir / "README.md").write_text(dataset_card(manifest), encoding="utf-8")
 
 
@@ -119,23 +118,9 @@ The `direct` and `reasoning` configurations contain exactly matched IDs in the s
 """  # noqa: E501
 
 
-def upload(args: argparse.Namespace, staging_dir: Path) -> tuple[str, str]:
-    api = HfApi()
-    commit = api.upload_folder(
-        folder_path=staging_dir,
-        repo_id=args.repo_id,
-        repo_type="dataset",
-        revision=args.revision,
-        commit_message="Upload matched Qwen3.5 KodCode SFT data",
-    )
-    return commit.commit_url, commit.oid
-
-
 def main() -> None:
     args = parse_args()
-    manifest = json.loads(
-        (utils.PROJECT_DIR / "manifests" / "data_manifest.json").read_text(encoding="utf-8")
-    )
+    manifest = read_json(PROJECT_DIR / "manifests" / "data_manifest.json")
     verify_payload(manifest)
 
     with tempfile.TemporaryDirectory(prefix="codellm-sft-upload-") as temporary:
@@ -146,9 +131,15 @@ def main() -> None:
         if args.dry_run:
             print("Dry run complete; no Hugging Face repository was changed.")
             return
-        commit_url, commit_sha = upload(args, staging_dir)
-        print(f"Uploaded: {commit_url}")
-        print(f"Dataset revision: {commit_sha}")
+        commit = upload_dataset_folder(
+            HfApi(),
+            staging_dir,
+            args.repo_id,
+            "Upload matched Qwen3.5 KodCode SFT data",
+            args.revision,
+        )
+        print(f"Uploaded: {commit.commit_url}")
+        print(f"Dataset revision: {commit.oid}")
 
 
 if __name__ == "__main__":

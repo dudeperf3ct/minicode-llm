@@ -2,11 +2,11 @@
 
 This directory contains the Axolotl implementation for the staged Qwen3.5-4B coding SFT experiment.
 
-The reusable matched-data pipeline produces the 10,000-example train split, 500-example validation split, 500-example untouched test split, and nested 1,000/32 training subsets needed by later phases.
-
 Chat-label audits and the four explicit 10K Axolotl configurations are implemented.
 
-## Pinned Components
+Dataset preparation, split design, provenance, Hub publication, and source references are documented in [`data/README.md`](data/README.md).
+
+## Pinned Runtime
 
 | Component | Version or identifier |
 | --- | --- |
@@ -15,120 +15,10 @@ Chat-label audits and the four explicit 10K Axolotl configurations are implement
 | Transformers | `5.14.1` |
 | Cut Cross Entropy | Axolotl fork commit `5f0c7a7` |
 | Base model and tokenizer | `Qwen/Qwen3.5-4B-Base@1001bb4d826a52d1f399e183466143f4da7b741b` |
-| KodCode source | `KodCode/KodCode-V1-SFT-R1@26c8a11c800d71b6c4bafe12a92c9090ef0b6214` |
-| HumanEval | `openai/openai_humaneval@7dce6050a7d6d172f3cc5c32aa97f52fa1a2e544` |
-| MBPP | `google-research-datasets/mbpp@4bb6404fdc6cacfda99d4ac4205087b89d32030c` |
-| LiveCodeBench | `livecodebench/code_generation_lite@0fe84c3912ea0c4d4a78037083943e8f0c4dd505`, `release_v5` |
-
-All revisions, including the materialized LiveCodeBench prompt mirror and Open-R1 reference script, are recorded in `manifests/revisions.json`.
-
-## Local Data-Preparation Environment
-
-From this directory:
-
-```bash
-uv sync --group dev
-```
-
-Run a basic import check:
-
-```bash
-uv run python -c \
-  "import datasets, transformers, yaml; print(datasets.__version__, transformers.__version__)"
-```
-
-## Prepare Matched Data
-
-The script downloads only the pinned KodCode `default/train` split and never loads the published `incorrect` or `use_with_caution` splits.
-
-```bash
-uv run python scripts/prepare_data.py
-```
-
-Regeneration is explicit:
-
-```bash
-uv run python scripts/prepare_data.py --overwrite
-```
-
-The pipeline performs source validation, normalized-question deduplication, Open-R1-style word 8-gram decontamination, Qwen3.5 chat-template length filtering, joint-stratum largest-remainder sampling, nested subset selection, and fail-fast split assertions. Generated JSONL and statistics live under `data/`; the trackable checksum manifest is `manifests/data_manifest.json`.
-
-The pinned run produced:
-
-- 268,211 source train rows;
-- 17 normalized-question duplicates and 5 malformed reasoning rows removed;
-- 26,906 rows removed by benchmark decontamination;
-- 708 reasoning examples removed above 16,384 tokens;
-- 240,575 eligible rows before stratified selection;
-- exact 10,000/500/500 train, validation, and untouched test splits.
-
-On the selected training split, reasoning assistant turns contain 26.63 times as many tokens as direct assistant turns. The reasoning total-length p99 is 14,340 tokens.
-
-LiveCodeBench is still pinned to the official dataset revision. Because its official Hugging Face dataset uses a remote loader script, the pipeline column-reads only `question_id` and `question_content` from the separately pinned `lighteval/code_generation_lite` `release_v5` Parquet mirror. The normalized 880-prompt snapshot hash is recorded in the output statistics.
-
-## Code Layout
-
-- `scripts/prepare_data.py` is the thin command orchestration layer.
-- `scripts/data_pipeline.py` handles verified-source filtering, length filtering, stratified selection, and split validation.
-- `scripts/data_writer.py` owns deterministic JSON/JSONL output, paired rendering, and token measurement.
-- `scripts/decontaminate.py` owns pinned benchmark loading and the reusable `NgramDecontaminator`.
-- `scripts/data_statistics.py` owns token and stratum aggregation.
-- `scripts/pipeline_utils.py` owns shared models, normalization, hashing, batching, and tokenizer helpers.
-- `scripts/pipeline_reports.py` owns ordered-ID, allocation, statistics, and checksum manifests.
-- `scripts/upload_dataset.py` verifies and uploads the reusable training payload.
-
-## Publish Prepared Training Data
-
-Hugging Face supports uploading a folder directly to a dataset repository revision. The repository must already exist, and local Hugging Face authentication must have write access.
-
-For authentication, either run `hf auth login` or provide a User Access Token through `HF_TOKEN`. A fine-grained token with write access limited to this dataset repository is preferred.
-
-Verify the active identity without printing the token:
-
-```bash
-uv run hf auth whoami
-```
-
-First verify the exact payload without changing the Hub:
-
-```bash
-uv run python scripts/upload_dataset.py \
-  --repo-id dudeperf3ct/qwen35-kodcode-sft-data \
-  --dry-run
-```
-
-Then create the branch and upload:
-
-```bash
-HF_XET_HIGH_PERFORMANCE=1 \
-uv run python scripts/upload_dataset.py \
-  --repo-id dudeperf3ct/qwen35-kodcode-sft-data
-```
-
-The uploader targets `main` by default, verifies local checksums before any remote mutation, and prints the resulting commit SHA. Pin that SHA in every Axolotl configuration before preprocessing or training.
-
-The upload contains two loadable configurations:
-
-```python
-from datasets import load_dataset
-
-direct = load_dataset(
-    "dudeperf3ct/qwen35-kodcode-sft-data",
-    "direct",
-    revision="db5f9912d76642bac325bea2bb41d83ad186365b",
-)
-reasoning = load_dataset(
-    "dudeperf3ct/qwen35-kodcode-sft-data",
-    "reasoning",
-    revision="db5f9912d76642bac325bea2bb41d83ad186365b",
-)
-```
-
-Each configuration exposes `train`, `validation`, `pilot`, and `overfit`.
 
 ## H100 Training Environment
 
-The Lambda Labs `1 x H100` machine configuration is the following:
+The Lambda Labs `1 x H100` machine configuration used for running experiments is the following:
 
 - NVIDIA H100 80 GB HBM3 SXM5;
 - 26 vCPUs and 225 GiB RAM;
@@ -150,10 +40,7 @@ uv pip install \
 uv pip install --no-build-isolation \
   'axolotl[deepspeed]==0.18.0'
 
-uv pip install \
-  'transformers==5.14.1' \
-  'datasets==4.4.1' \
-  'huggingface-hub==1.23.0'
+uv pip install -e .
 ```
 
 Install the official CUDA 12.8 FlashAttention-3 wheel published by PyTorch:
@@ -234,11 +121,12 @@ See the [Axolotl attention documentation](https://docs.axolotl.ai/docs/attention
 
 Flash Linear Attention `0.4.1`, installed with Axolotl, accelerates Qwen3.5's Gated DeltaNet layers and is separate from FlashAttention-3. Sample packing remains disabled. DeepSpeed is installed through Axolotl's documented extra but will not be enabled for the single-H100 runs.
 
+> [!NOTE]
+> The dataset repository and immutable revision are documented in [`data/README.md`](data/README.md).
 
 ## Audit Chat Labels
 
-The audit configurations are preprocessing-only inputs. They read the
-`overfit` split from the prepared Hub dataset, use the official `qwen3_5` template, train only assistant turns, split reasoning targets into Qwen's `reasoning_content`, and explicitly identify `<|im_end|>` as the turn terminator. Direct and reasoning use separate prepared-data paths.
+The audit configurations are preprocessing-only inputs. They read the `overfit` split from the prepared Hub dataset, use the official `qwen3_5` template, train only assistant turns, split reasoning targets into Qwen's `reasoning_content`, and explicitly identify `<|im_end|>` as the turn terminator. Direct and reasoning use separate prepared-data paths.
 
 From the H100 environment, run:
 
@@ -296,9 +184,7 @@ configs/
 └── reasoning-fft.yml
 ```
 
-The overfit LoRA runs use the 32-example `overfit` split for 100 optimizer
-steps with gradient accumulation disabled. The direct full-FT smoke test runs
-for five optimizer steps. Run them sequentially:
+The overfit LoRA runs use the 32-example `overfit` split for 100 optimizer steps with gradient accumulation disabled. The direct full-FT smoke test runs for five optimizer steps. Run the following steps in parallel:
 
 ```bash
 mkdir -p logs/overfit
@@ -314,7 +200,7 @@ axolotl train configs/overfit/direct-fft.yml \
   2>&1 | tee logs/overfit/direct-fft.log
 ```
 
-After the Phase 0 acceptance checks pass, run the four one-epoch 1K pilots:
+After reviewing overfitting phase, run the four one-epoch 1K pilots:
 
 ```bash
 mkdir -p logs/pilot
@@ -332,17 +218,14 @@ axolotl train configs/pilot/reasoning-fft.yml \
   2>&1 | tee logs/pilot/reasoning-fft.log
 ```
 
-Every stage has distinct prepared-data, output, and W&B run paths. The root
-configuration files remain the two-epoch 10K main experiment.
+Every stage has distinct prepared-data, output, and W&B run paths. The root configuration files remain the two-epoch 10K main experiment.
 
 ## Main 10K Configurations
 
-The experiment identity is:
+> [!NOTE]
+> The dataset repository and immutable revision are documented in [`data/README.md`](data/README.md).
 
-- Hugging Face dataset: `dudeperf3ct/qwen35-kodcode-sft-data`
-- Dataset branch: `main`
-- Dataset revision: `db5f9912d76642bac325bea2bb41d83ad186365b`
-- W&B entity/project: `dudeperf3ct/qwen35-4b-kodcode-sft`
+The W&B entity/project is `dudeperf3ct/qwen35-4b-kodcode-sft`.
 
 The four explicit configurations are:
 
@@ -364,9 +247,11 @@ Within either training method, direct and reasoning differ only in target select
 - dataset_prepared_path: ./prepared/p2-10k-direct-<method>-s42
 - output_dir: ./outputs/p2-10k-direct-<method>-s42
 - wandb_name: main-10k-direct-<method>-seed42
+- wandb_run_id: main-10k-direct-<method>-seed42
 + dataset_prepared_path: ./prepared/p2-10k-reasoning-<method>-s42
 + output_dir: ./outputs/p2-10k-reasoning-<method>-s42
 + wandb_name: main-10k-reasoning-<method>-seed42
++ wandb_run_id: main-10k-reasoning-<method>-seed42
 ```
 
 For either target, LoRA and language-model full FT differ only in method
@@ -387,9 +272,11 @@ settings and run identity:
 - dataset_prepared_path: ./prepared/p2-10k-<target>-lora-s42
 - output_dir: ./outputs/p2-10k-<target>-lora-s42
 - wandb_name: main-10k-<target>-lora-seed42
+- wandb_run_id: main-10k-<target>-lora-seed42
 + dataset_prepared_path: ./prepared/p2-10k-<target>-fft-s42
 + output_dir: ./outputs/p2-10k-<target>-fft-s42
 + wandb_name: main-10k-<target>-fft-seed42
++ wandb_run_id: main-10k-<target>-fft-seed42
 ```
 
 Verified final weights will later use:
@@ -398,3 +285,61 @@ Verified final weights will later use:
 - `dudeperf3ct/qwen35-4b-base-kodcode-10k-reasoning-lora`
 - `dudeperf3ct/qwen35-4b-base-kodcode-10k-direct-fft`
 - `dudeperf3ct/qwen35-4b-base-kodcode-10k-reasoning-fft`
+
+## Held-Out Test Evaluation
+
+Run the untouched 500-example test split only after the four 10K runs and all training decisions are final. The test evaluator uses the same greedy decoding, 16,384-token generation limit, Qwen3.5 chat template, and private tests for all four checkpoints. It loads the immutable dataset revision from `manifests/evaluation.json`.
+
+Direct requests set `enable_thinking: false`; reasoning requests set it to `true`.
+The editable project install includes the pinned `pytest` runner used for private tests.
+
+Merge both LoRA adapters before evaluation:
+
+```bash
+axolotl merge-lora configs/direct-lora.yml \
+  --lora-model-dir ./outputs/p2-10k-direct-lora-s42
+
+axolotl merge-lora configs/reasoning-lora.yml \
+  --lora-model-dir ./outputs/p2-10k-reasoning-lora-s42
+```
+
+Serve one checkpoint at a time from the separate vLLM environment. For example, the direct LoRA checkpoint is:
+
+```bash
+.venv-vllm/bin/vllm serve \
+  outputs/p2-10k-direct-lora-s42/merged \
+  --served-model-name main-10k-direct-lora-seed42 \
+  --reasoning-parser qwen3 \
+  --dtype bfloat16 \
+  --max-model-len 32768 \
+  --gpu-memory-utilization 0.80
+```
+
+In another shell, activate the Axolotl environment and run:
+
+```bash
+python scripts/evaluate_test.py \
+  --config configs/direct-lora.yml
+```
+
+Stop the server, serve the next checkpoint, and use the matching evaluation command:
+
+| Run | Checkpoint | Evaluation arguments |
+| --- | --- | --- |
+| Direct LoRA | `outputs/p2-10k-direct-lora-s42/merged` | `--config configs/direct-lora.yml` |
+| Reasoning LoRA | `outputs/p2-10k-reasoning-lora-s42/merged` | `--config configs/reasoning-lora.yml` |
+| Direct full FT | `outputs/p2-10k-direct-fft-s42` | `--config configs/direct-fft.yml` |
+| Reasoning full FT | `outputs/p2-10k-reasoning-fft-s42` | `--config configs/reasoning-fft.yml` |
+
+Each run writes resumable per-example results to `reports/test/<wandb-run-id>/results.jsonl` and aggregate metrics to `reports/test/<wandb-run-id>/summary.json`. The summary includes pass rate overall and by difficulty/subset/style, average output tokens, thinking and final-code rates, truncations, extraction failures, syntax errors, test timeouts, and API errors.
+Rows that ended with `api_error` are retried on the next invocation; completed model outputs and test results are reused.
+
+Once evaluation completes, the same script reopens the completed W&B
+run record by its explicit `wandb_run_id`. It adds the test summary metrics and uploads both result files as an `evaluation` artifact.
+
+> [!WARNING]
+> The evaluator executes model-generated Python. Run it only inside the
+> disposable experiment VM, never on a workstation containing credentials or
+> important files.
+
+vLLM documents request-level `chat_template_kwargs` for controlling Qwen thinking mode in its [reasoning-output guide](https://docs.vllm.ai/en/stable/features/reasoning_outputs/).

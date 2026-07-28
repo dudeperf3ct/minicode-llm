@@ -6,17 +6,18 @@ prompts; normalize them; build word-level 8-gram indices; remove any KodCode
 question sharing a benchmark n-gram; and write an auditable removal report.
 """
 
-import json
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import data_writer
-import pipeline_utils as utils
 import pyarrow.parquet as pq
 from datasets import DatasetDict, load_dataset
-from huggingface_hub import HfApi, HfFileSystem
+from huggingface_hub import HfFileSystem
+
+import pipeline_utils as utils
+from hub_utils import assert_revision, list_files
+from json_utils import compact_json, write_jsonl
 
 type BenchmarkLookups = dict[str, dict[str, str]]
 
@@ -65,7 +66,7 @@ class NgramDecontaminator:
 
     def _load_humaneval(self, audit: dict[str, Any]) -> list[BenchmarkPrompt]:
         config = self.revisions["benchmarks"]["humaneval"]
-        utils.assert_hub_revision(config["repo_id"], config["revision"], "dataset")
+        assert_revision(config["repo_id"], config["revision"])
         rows = load_dataset(
             config["repo_id"],
             config["config"],
@@ -78,7 +79,7 @@ class NgramDecontaminator:
 
     def _load_mbpp(self, audit: dict[str, Any]) -> list[BenchmarkPrompt]:
         config = self.revisions["benchmarks"]["mbpp"]
-        utils.assert_hub_revision(config["repo_id"], config["revision"], "dataset")
+        assert_revision(config["repo_id"], config["revision"])
         rows = load_dataset(
             config["repo_id"],
             config["config"],
@@ -98,16 +99,13 @@ class NgramDecontaminator:
 
     def _load_livecodebench(self, audit: dict[str, Any]) -> list[BenchmarkPrompt]:
         config = self.revisions["benchmarks"]["livecodebench"]
-        utils.assert_hub_revision(config["repo_id"], config["revision"], "dataset")
+        assert_revision(config["repo_id"], config["revision"])
         mirror = config["materialized_mirror"]
-        utils.assert_hub_revision(mirror["repo_id"], mirror["revision"], "dataset")
 
         prefix = f"{config['config']}/"
         files = sorted(
             path
-            for path in HfApi().list_repo_files(
-                mirror["repo_id"], repo_type="dataset", revision=mirror["revision"]
-            )
+            for path in list_files(mirror["repo_id"], mirror["revision"])
             if path.startswith(prefix) and path.endswith(".parquet")
         )
         prompts: list[BenchmarkPrompt] = []
@@ -176,7 +174,7 @@ class NgramDecontaminator:
                 clean.append(candidate)
 
         reports.sort(key=lambda row: row["question_id"])
-        data_writer.write_jsonl(report_path, reports)
+        write_jsonl(report_path, reports)
         counts["clean_after_decontamination"] = len(clean)
         return clean, dict(sorted(counts.items()))
 
@@ -218,15 +216,12 @@ class NgramDecontaminator:
     @staticmethod
     def _snapshot_hash(prompts: list[BenchmarkPrompt]) -> str:
         lines = [
-            json.dumps(
+            compact_json(
                 {
                     "benchmark": prompt.benchmark,
                     "prompt": utils.normalize_text(prompt.prompt),
                     "task_id": prompt.task_id,
-                },
-                ensure_ascii=False,
-                sort_keys=True,
-                separators=(",", ":"),
+                }
             )
             for prompt in prompts
         ]

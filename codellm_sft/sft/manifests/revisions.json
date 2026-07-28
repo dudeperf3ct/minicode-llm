@@ -37,7 +37,7 @@
     }
   },
   "decontamination_reference": {
-    "path": "scripts/decontaminate.py",
+    "path": "src/decontaminate.py",
     "repo_id": "huggingface/open-r1",
     "revision": "1416fa0cf21595d2083b399a2a0bbddd7f6e9563"
   },

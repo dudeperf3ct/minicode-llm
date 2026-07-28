@@ -13,13 +13,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from datasets import Dataset
+from transformers import AutoTokenizer, PreTrainedTokenizerBase
+
 import data_pipeline
 import data_writer
 import decontaminate
 import pipeline_reports
 import pipeline_utils as utils
-from datasets import Dataset
-from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 
 @dataclass(frozen=True)
@@ -45,11 +46,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--sequence-length", type=int, default=16_384)
-    parser.add_argument("--train-size", type=int, default=10_000)
-    parser.add_argument("--validation-size", type=int, default=500)
-    parser.add_argument("--test-size", type=int, default=500)
-    parser.add_argument("--pilot-size", type=int, default=1_000)
-    parser.add_argument("--overfit-size", type=int, default=32)
+    parser.add_argument("--train-size", type=int, default=utils.DEFAULT_TRAIN_SIZE)
     parser.add_argument("--ngram-size", type=int, default=8)
     parser.add_argument("--tokenizer-batch-size", type=int, default=512)
     parser.add_argument("--overwrite", action="store_true")
@@ -73,7 +70,7 @@ def prepare_source(
         sequence_length=args.sequence_length,
         batch_size=args.tokenizer_batch_size,
     )
-    required = args.train_size + args.validation_size + args.test_size
+    required = args.train_size + utils.VALIDATION_SIZE + utils.TEST_SIZE
     if len(candidates) < required:
         raise RuntimeError(f"Only {len(candidates)} examples remain; {required} are required")
     return PreparedSource(
@@ -101,30 +98,30 @@ def load_tokenizer(revisions: dict[str, Any]) -> PreTrainedTokenizerBase:
 def build_split_selection(
     candidates: list[utils.Candidate], args: argparse.Namespace
 ) -> data_pipeline.SplitSelection:
-    total_size = args.train_size + args.validation_size + args.test_size
+    total_size = args.train_size + utils.VALIDATION_SIZE + utils.TEST_SIZE
     selected, selected_allocation = data_pipeline.select_stratified(
         candidates=candidates, size=total_size, seed=args.seed, namespace="main"
     )
     splits, split_allocations = data_pipeline.partition_selected(
         selected=selected,
         train_size=args.train_size,
-        validation_size=args.validation_size,
-        test_size=args.test_size,
+        validation_size=utils.VALIDATION_SIZE,
+        test_size=utils.TEST_SIZE,
         seed=args.seed,
     )
     pilot, pilot_allocation = data_pipeline.select_stratified(
-        candidates=splits["train"], size=args.pilot_size, seed=args.seed, namespace="pilot"
+        candidates=splits["train"], size=utils.PILOT_SIZE, seed=args.seed, namespace="pilot"
     )
     overfit, overfit_allocation = data_pipeline.select_stratified(
-        candidates=pilot, size=args.overfit_size, seed=args.seed, namespace="overfit"
+        candidates=pilot, size=utils.OVERFIT_SIZE, seed=args.seed, namespace="overfit"
     )
     data_pipeline.assert_prepared_data(
         splits=splits,
         pilot=pilot,
         overfit=overfit,
         train_size=args.train_size,
-        validation_size=args.validation_size,
-        test_size=args.test_size,
+        validation_size=utils.VALIDATION_SIZE,
+        test_size=utils.TEST_SIZE,
     )
     return data_pipeline.SplitSelection(
         train=splits["train"],
@@ -142,19 +139,14 @@ def build_split_selection(
 def manifest_parameters(args: argparse.Namespace) -> dict[str, int]:
     return {
         "ngram_size": args.ngram_size,
-        "overfit_size": args.overfit_size,
-        "pilot_size": args.pilot_size,
+        "overfit_size": utils.OVERFIT_SIZE,
+        "pilot_size": utils.PILOT_SIZE,
         "seed": args.seed,
         "sequence_length": args.sequence_length,
-        "test_size": args.test_size,
+        "test_size": utils.TEST_SIZE,
         "train_size": args.train_size,
-        "validation_size": args.validation_size,
+        "validation_size": utils.VALIDATION_SIZE,
     }
-
-
-def validate_args(args: argparse.Namespace) -> None:
-    if args.pilot_size > args.train_size or args.overfit_size > args.pilot_size:
-        raise ValueError("Nested subset sizes are inconsistent")
 
 
 def reset_output_dir(output_dir: Path, overwrite: bool) -> None:
@@ -167,7 +159,8 @@ def reset_output_dir(output_dir: Path, overwrite: bool) -> None:
 
 def main() -> None:
     args = parse_args()
-    validate_args(args)
+    if args.train_size < utils.PILOT_SIZE:
+        raise ValueError(f"--train-size must be at least {utils.PILOT_SIZE}")
     output_dir = args.output_dir.resolve()
     reset_output_dir(output_dir, args.overwrite)
 
@@ -214,7 +207,7 @@ def main() -> None:
         command=manifest_parameters(args),
     )
 
-    total_size = args.train_size + args.validation_size + args.test_size
+    total_size = args.train_size + utils.VALIDATION_SIZE + utils.TEST_SIZE
     print(f"Prepared {total_size} matched examples under {output_dir}", flush=True)
 
 

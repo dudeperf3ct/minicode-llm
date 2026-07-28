@@ -12,12 +12,13 @@ import argparse
 from dataclasses import dataclass
 from pathlib import Path
 
-import data_statistics
-import data_writer
-import pipeline_utils as utils
 import yaml
 from datasets import Dataset, load_dataset, load_from_disk
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
+
+from data_statistics import summarize_lengths
+from json_utils import write_json
+from pipeline_utils import PROJECT_DIR
 
 IGNORE_TOKEN_ID = -100
 
@@ -72,16 +73,14 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(config.model, revision=config.revision)
     eot_id = _single_token_id(tokenizer, config.eot_token)
     measurements = _audit_dataset(config, source_rows, prepared, tokenizer, eot_id)
-    data_writer.write_json(
-        config.output, _build_report(config, prepared_path, measurements, args.examples)
-    )
+    write_json(config.output, _build_report(config, prepared_path, measurements, args.examples))
     print(f"Label audit passed: {config.output}")
 
 
 def load_audit_config(path: Path, output: Path | None = None) -> AuditConfig:
     """Read the config fields needed to locate and audit prepared labels."""
 
-    raw = yaml.safe_load((utils.PROJECT_DIR / path).resolve().read_text(encoding="utf-8"))
+    raw = yaml.safe_load((PROJECT_DIR / path).resolve().read_text(encoding="utf-8"))
     dataset = raw["datasets"][0]
     variant = "reasoning" if dataset.get("split_thinking") else "direct"
     report = output or Path(f"reports/label-audit/{variant}.json")
@@ -90,8 +89,8 @@ def load_audit_config(path: Path, output: Path | None = None) -> AuditConfig:
         dataset_name=dataset["name"],
         dataset_revision=dataset["revision"],
         dataset_split=dataset["split"],
-        prepared=(utils.PROJECT_DIR / raw["dataset_prepared_path"]).resolve(),
-        output=(utils.PROJECT_DIR / report).resolve(),
+        prepared=(PROJECT_DIR / raw["dataset_prepared_path"]).resolve(),
+        output=(PROJECT_DIR / report).resolve(),
         model=raw["base_model"],
         revision=raw["revision_of_model"],
         variant=variant,
@@ -283,7 +282,7 @@ def _build_report(
         "dataset_name": config.dataset_name,
         "dataset_revision": config.dataset_revision,
         "dataset_split": config.dataset_split,
-        "prepared_dataset": str(prepared_path.relative_to(utils.PROJECT_DIR)),
+        "prepared_dataset": str(prepared_path.relative_to(PROJECT_DIR)),
         "model": config.model,
         "revision": config.revision,
         "examples": len(measurements),
@@ -291,8 +290,8 @@ def _build_report(
         "trainable_tokens": trainable_tokens,
         "masked_tokens": total_tokens - trainable_tokens,
         "trainable_token_fraction": trainable_tokens / total_tokens,
-        "total_length": data_statistics.summarize_lengths(total_lengths),
-        "trainable_length": data_statistics.summarize_lengths(trainable_lengths),
+        "total_length": summarize_lengths(total_lengths),
+        "trainable_length": summarize_lengths(trainable_lengths),
         "inspected_examples": measurements[:inspected],
     }
 

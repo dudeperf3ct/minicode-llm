@@ -1,0 +1,7 @@
+{
+  "test_dataset": {
+    "repo_id": "dudeperf3ct/qwen35-kodcode-sft-private-test",
+    "revision": "8fbebc91f03fa40703b03a00879a3c651acaccd4",
+    "split": "test"
+  }
+}

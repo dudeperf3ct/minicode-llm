@@ -6,16 +6,17 @@ jointly stratified train/validation/test and nested subsets, and validates
 split invariants. File serialization lives in ``data_writer``.
 """
 
-import json
 import math
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import Any
 
-import pipeline_utils as utils
 from datasets import Dataset, load_dataset
-from huggingface_hub import HfApi, hf_hub_download
+from huggingface_hub import hf_hub_download
 from transformers import PreTrainedTokenizerBase
+
+import pipeline_utils as utils
+from hub_utils import list_files
 
 type Allocation = dict[utils.Stratum, int]
 type SplitMap = dict[str, list[utils.Candidate]]
@@ -192,10 +193,9 @@ def largest_remainder(capacities: dict[utils.Stratum, int], size: int) -> Alloca
     exact = {stratum: capacity * size / total for stratum, capacity in capacities.items()}
     allocation = {stratum: math.floor(quota) for stratum, quota in exact.items()}
     remaining = size - sum(allocation.values())
-    # Serialize the stratum only as a stable tie-breaker for equal remainders.
     ranked = sorted(
         capacities,
-        key=lambda stratum: (-(exact[stratum] - allocation[stratum]), json.dumps(stratum)),
+        key=lambda stratum: (-(exact[stratum] - allocation[stratum]), stratum),
     )
     for stratum in ranked[:remaining]:
         allocation[stratum] += 1
@@ -247,12 +247,9 @@ def assert_prepared_data(
 
 
 def _download_train_files(source_revision: dict[str, Any]) -> list[str]:
-    utils.assert_hub_revision(source_revision["repo_id"], source_revision["revision"], "dataset")
     train_files = sorted(
         path
-        for path in HfApi().list_repo_files(
-            source_revision["repo_id"], repo_type="dataset", revision=source_revision["revision"]
-        )
+        for path in list_files(source_revision["repo_id"], source_revision["revision"])
         if path.startswith("data/train-") and path.endswith(".parquet")
     )
     if len(train_files) != 11:

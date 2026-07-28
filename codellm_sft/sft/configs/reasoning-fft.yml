@@ -47,8 +47,8 @@ excess_length_strategy: raise
 sample_packing: false
 pad_to_sequence_len: false
 
-micro_batch_size: 2
-gradient_accumulation_steps: 4
+micro_batch_size: 4
+gradient_accumulation_steps: 2
 num_epochs: 2
 
 bf16: true

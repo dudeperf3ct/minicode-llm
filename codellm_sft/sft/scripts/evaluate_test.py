@@ -17,6 +17,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 from collections import defaultdict
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -43,6 +44,8 @@ MAIN_CONFIGS = (
     "configs/reasoning-fft.yml",
 )
 RETRYABLE_STATUSES = {"api_error"}
+EVALUATOR_VERSION = 2
+ONLINE_JUDGE_STYLE = "online_judge"
 
 JsonObject = dict[str, Any]
 
@@ -204,7 +207,7 @@ def evaluate_example(
     message = choice["message"]
     content = message.get("content") or ""
     reasoning = message.get("reasoning") or message.get("reasoning_content") or ""
-    code = extract_code(content)
+    code = extract_code(content, example.style)
 
     result = {
         **example_metadata(example),
@@ -228,7 +231,7 @@ def evaluate_example(
 
     result["has_final_code"] = True
     result["code"] = code
-    result.update(run_private_tests(code, example.test, test_timeout))
+    result.update(run_private_tests(code, example.test, example.style, test_timeout))
     return result
 
 
@@ -236,6 +239,7 @@ def example_metadata(example: TestExample) -> JsonObject:
     return {
         "id": example.id,
         "difficulty": example.difficulty,
+        "evaluator_version": EVALUATOR_VERSION,
         "subset": example.subset,
         "style": example.style,
     }
@@ -270,23 +274,76 @@ def get_served_model(client: httpx.Client) -> str:
     return models[0]["id"]
 
 
-def extract_code(content: str) -> str:
+def extract_code(content: str, style: str) -> str:
     content = content.replace("<|im_end|>", "").strip()
     fenced = CODE_FENCE.findall(content)
     if fenced:
         return "\n\n".join(block.strip() for block in fenced)
+    if style == ONLINE_JUDGE_STYLE:
+        return content
     return content if CODE_MARKERS.search(content) else ""
 
 
-def run_private_tests(code: str, tests: str, timeout: int) -> JsonObject:
+def run_private_tests(code: str, tests: str, style: str, timeout: int) -> JsonObject:
+    if style == ONLINE_JUDGE_STYLE:
+        return run_online_judge_tests(code, tests, timeout)
+    return run_pytest_tests(code, tests, timeout)
+
+
+def run_online_judge_tests(code: str, tests: str, timeout: int) -> JsonObject:
+    cases = ast.literal_eval(tests)
+    if (
+        not isinstance(cases, dict)
+        or not isinstance(cases.get("stdin"), list)
+        or not isinstance(cases.get("stdout"), list)
+        or len(cases["stdin"]) != len(cases["stdout"])
+    ):
+        raise ValueError("Online-judge tests must contain matched stdin/stdout lists")
+
+    with tempfile.TemporaryDirectory(prefix="kodcode-test-") as directory:
+        workdir = Path(directory)
+        (workdir / "solution.py").write_text(code, encoding="utf-8")
+        env = test_environment(directory)
+        deadline = time.monotonic() + timeout
+
+        for index, (stdin, expected) in enumerate(
+            zip(cases["stdin"], cases["stdout"], strict=True), start=1
+        ):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return {"status": "test_timeout", "passed": False}
+            try:
+                process = subprocess.run(
+                    [sys.executable, "solution.py"],
+                    cwd=workdir,
+                    env=env,
+                    input=f"{stdin}\n",
+                    capture_output=True,
+                    text=True,
+                    timeout=remaining,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                return {"status": "test_timeout", "passed": False}
+
+            actual = process.stdout.strip()
+            if process.returncode != 0 or actual != expected.strip():
+                details = f"case {index}: expected {expected!r}, got {actual!r}\n{process.stderr}"
+                return {
+                    "status": "test_failed",
+                    "passed": False,
+                    "test_output": details[-4_000:],
+                }
+
+    return {"status": "passed", "passed": True, "test_output": ""}
+
+
+def run_pytest_tests(code: str, tests: str, timeout: int) -> JsonObject:
     with tempfile.TemporaryDirectory(prefix="kodcode-test-") as directory:
         workdir = Path(directory)
         (workdir / "solution.py").write_text(code, encoding="utf-8")
         (workdir / "test_solution.py").write_text(tests, encoding="utf-8")
-        env = os.environ.copy()
-        env.update(HOME=directory, PYTHONDONTWRITEBYTECODE="1")
-        env.pop("HF_TOKEN", None)
-        env.pop("WANDB_API_KEY", None)
+        env = test_environment(directory)
 
         try:
             process = subprocess.run(
@@ -316,6 +373,14 @@ def run_private_tests(code: str, tests: str, timeout: int) -> JsonObject:
     }
 
 
+def test_environment(home: str) -> dict[str, str]:
+    env = os.environ.copy()
+    env.update(HOME=home, PYTHONDONTWRITEBYTECODE="1")
+    env.pop("HF_TOKEN", None)
+    env.pop("WANDB_API_KEY", None)
+    return env
+
+
 def build_summary(
     run_config: EvaluationConfig, model: str, test_dataset: TestDataset, results: list[JsonObject]
 ) -> JsonObject:
@@ -329,6 +394,7 @@ def build_summary(
         "wandb_name": run_config.wandb.name,
         "model": model,
         "mode": run_config.mode,
+        "evaluator_version": EVALUATOR_VERSION,
         "test_dataset": {
             "repo_id": test_dataset.repo_id,
             "revision": test_dataset.revision,
@@ -383,7 +449,13 @@ def read_completed_results(path: Path) -> dict[str, JsonObject]:
     if not path.exists():
         return {}
     return {
-        row["id"]: row for row in read_jsonl(path) if row.get("status") not in RETRYABLE_STATUSES
+        row["id"]: row
+        for row in read_jsonl(path)
+        if row.get("status") not in RETRYABLE_STATUSES
+        and not (
+            row.get("style") == ONLINE_JUDGE_STYLE
+            and row.get("evaluator_version") != EVALUATOR_VERSION
+        )
     }
 
 

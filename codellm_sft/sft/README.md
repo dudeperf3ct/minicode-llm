@@ -296,19 +296,43 @@ settings and run identity:
 
 ## Run 10K on Two H100s
 
-Run one experiment at a time across both GPUs with DDP. Axolotl uses DDP by default when neither DeepSpeed nor FSDP is configured. Each run retains a global batch size of 16:
+Run one experiment at a time across both GPUs with DDP when clean throughput comparisons and predictable recovery matter. Axolotl uses DDP by default when neither DeepSpeed nor FSDP is configured. The current configs retain a global batch size of 16:
 
-| Method | Pilot peak, 1 GPU | Microbatch/GPU | Accumulation | GPUs | Global batch |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| LoRA | 16.71 GiB | 4 | 2 | 2 | 16 |
-| Full FT | 41.07 GiB | 2 | 4 | 2 | 16 |
+| Run | Microbatch/GPU | Accumulation | GPUs | Global batch | Peak active/GPU | Train runtime |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Direct LoRA | 8 | 1 | 2 | 16 | 18.16 GiB | 2h 28m 23s |
+| Direct full FT | 8 | 1 | 2 | 16 | 44.96 GiB | 2h 24m 29s |
+| Reasoning LoRA | 4 | 2 | 2 | 16 | Not measured | Not measured |
+| Reasoning full FT | 4 | 2 | 2 | 16 | Not measured | Not measured |
 
-The peaks are the worst observed values across the direct and reasoning 1K pilots. A simple fixed-state plus linearly scaled activation estimate puts the new worst cases near 37 GiB for LoRA and 58 GiB for full FT per GPU. These are planning estimates, not memory guarantees.
+The direct figures are observed two-H100 results, not ideal-scaling estimates. Those two jobs overlapped on the same instance: elapsed time from the first trainer start to the final save was 2h 30m 39s, costing about $21.04 at $8.38/hour. Summing their individual runtimes gives 4h 52m 52s, or about $40.90, as a rough sequential planning value.
+
+```bash
+mkdir -p logs/main
+
+axolotl train configs/direct-lora.yml --launcher torchrun -- --nproc_per_node=2 --nnodes=1 2>&1 | tee logs/main/direct-lora.log
+
+axolotl train configs/direct-fft.yml \
+  --launcher torchrun \
+  -- \
+  --rdzv-backend=c10d \
+  --rdzv-endpoint=localhost:0 \
+  --nproc_per_node=2 \
+  --nnodes=1 \
+  2>&1 | tee logs/main/direct-fft.log
+
+axolotl train configs/reasoning-lora.yml \
+  --launcher torchrun \
+  -- \
+  --rdzv-backend=c10d \
+  --rdzv-endpoint=localhost:0 \
+  --nproc_per_node=2 \
+  --nnodes=1 \
+  2>&1 | tee logs/main/reasoning-lora.log
+```
 
 > [!NOTE]
 > See Axolotl's [multi-GPU guide](https://docs.axolotl.ai/docs/multi-gpu.html), [CLI launcher documentation](https://docs.axolotl.ai/docs/cli.html), and the Transformers [effective batch-size definition](https://huggingface.co/docs/transformers/main_classes/trainer).
-
-Based on the single-H100 pilot runtimes, ideal two-GPU scaling projects roughly 4.5-5 hours for each direct run and 19 hours for each reasoning run. Sequential execution therefore starts near 47 hours, or about $394 at $8.38/hour, before accounting for DDP efficiency and the larger microbatches.
 
 ## Held-Out Test Evaluation
 
@@ -316,8 +340,44 @@ Run the untouched 500-example test split only after the four 10K runs and all tr
 
 Direct requests set `enable_thinking: false`; reasoning requests set it to `true`.
 
-The editable project install includes the pinned `pytest` runner used for
-private tests.
+The editable project install includes the pinned `pytest` runner used for private tests.
+
+Create a dedicated held-out inference environment. Qwen3.5 requires the current
+vLLM nightly line, and a clean environment lets `uv` install a mutually
+compatible vLLM, PyTorch, and CUDA runtime without changing the Axolotl training
+environment:
+
+```bash
+uv venv .venv-vllm --python 3.12 --seed
+source .venv-vllm/bin/activate
+
+uv pip install --upgrade vllm \
+  --torch-backend=auto \
+  --extra-index-url https://wheels.vllm.ai/nightly
+```
+
+Verify the held-out inference environment before serving a checkpoint:
+
+```bash
+python - <<'PY'
+import torch
+import vllm
+
+print("torch:", torch.__version__)
+print("torch CUDA:", torch.version.cuda)
+print("vLLM:", vllm.__version__)
+print("GPU:", torch.cuda.get_device_name())
+PY
+```
+
+Observed output on the held-out H100 evaluation machine:
+
+```text
+torch: 2.13.0+cu132
+torch CUDA: 13.2
+vLLM: 0.26.1rc1.dev278+g5df9999fc
+GPU: NVIDIA H100 80GB HBM3
+```
 
 Merge both LoRA adapters before evaluation:
 

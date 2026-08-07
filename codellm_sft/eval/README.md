@@ -16,7 +16,12 @@ To run evaluation benchmark, we will use [evalplus](https://github.com/evalplus/
 
 Hardware: 1 x A100 40 GB SXM4 ($1.99/hr July 2026 on Lambda Labs)
 
-For fair evaluation, we will use greedy decoding, official Qwen-3.5 model chat template and 16,384 maximum generation length [^1].
+For fair comparison with the completed base and SFT evaluations, the `direct`
+profile retains the original EvalPlus protocol: greedy decoding, a 768-token
+generation limit, and EvalPlus's 2,048-token embedded-vLLM context limit [^1].
+The separate `thinking` profile follows the Qwen3.5 thinking-mode recommendation
+with temperature `0.6` and a 32,768-token generation limit [^2]. Thinking scores
+are a higher-compute capability reference rather than an equal-compute comparison.
 
 ## Running evaluation benchmark
 
@@ -31,8 +36,14 @@ Install the library,
 ```bash
 uv venv --python 3.12
 source .venv/bin/activate
-uv pip install --upgrade "evalplus[vllm] @ git+https://github.com/evalplus/evalplus.git"
+uv pip install --upgrade \
+  "evalplus[vllm] @ git+https://github.com/evalplus/evalplus.git@26d6d00bb1fd0fa37f39c99d5290da67891d1c5e"
 ```
+
+`run_evalplus.sh` runs both HumanEval and MBPP. Existing two-argument commands
+default to the `direct` profile and remain compatible with previously generated
+results. Each result directory receives a `protocol.json`; the runner refuses to
+reuse that directory with incompatible settings.
 
 Running the HumanEval and MBPP benchmarks,
 
@@ -44,18 +55,81 @@ Base Qwen model (about 30 mins)
   results/qwen3.5-4b-base/evalplus
 ```
 
-Post trained Qwen model (about 30 mins)
+Direct SFT model
 
 ```bash
 ./run_evalplus.sh \
-  "Qwen/Qwen3.5-4B" \
-  "results/qwen3.5-4b-post-trained/evalplus"
+  /path/to/qwen3.5-4b-kodcode-sft \
+  results/qwen3.5-4b-direct-fft/evalplus
 ```
 
-Change the `MODEL` to `"/path/to/qwen3.5-4b-kodcode-sft"` to run evaluations on for SFT models.
+An explicit generation limit can be supplied without changing the profile:
+
+```bash
+./run_evalplus.sh \
+  /path/to/model \
+  results/model/evalplus \
+  --profile direct \
+  --max-new-tokens 768
+```
+
+### Post-trained direct mode
+
+The post-trained checkpoint requires an OpenAI-compatible vLLM server so that
+thinking can be explicitly disabled. Start the server in one terminal:
+
+```bash
+vllm serve Qwen/Qwen3.5-4B \
+  --served-model-name qwen35-4b-post-direct \
+  --reasoning-parser qwen3 \
+  --default-chat-template-kwargs '{"enable_thinking": false}' \
+  --language-model-only \
+  --generation-config auto \
+  --dtype bfloat16 \
+  --max-model-len 2048 \
+  --gpu-memory-utilization 0.90
+```
+
+Run the matched direct evaluation in another terminal:
+
+```bash
+OPENAI_API_KEY=EMPTY ./run_evalplus.sh \
+  qwen35-4b-post-direct \
+  results/qwen3.5-4b-post-trained/direct/evalplus \
+  --profile direct \
+  --base-url http://127.0.0.1:8000/v1
+```
+
+### Post-trained thinking mode
+
+Start a fresh server with thinking enabled and sufficient context:
+
+```bash
+vllm serve Qwen/Qwen3.5-4B \
+  --served-model-name qwen35-4b-post-thinking \
+  --reasoning-parser qwen3 \
+  --default-chat-template-kwargs '{"enable_thinking": true}' \
+  --language-model-only \
+  --generation-config auto \
+  --dtype bfloat16 \
+  --max-model-len 65536 \
+  --gpu-memory-utilization 0.90
+```
+
+Run the thinking evaluation in another terminal:
+
+```bash
+OPENAI_API_KEY=EMPTY ./run_evalplus.sh \
+  qwen35-4b-post-thinking \
+  results/qwen3.5-4b-post-trained/thinking/evalplus \
+  --profile thinking \
+  --base-url http://127.0.0.1:8000/v1
+```
 
 > [!WARNING]
-> HumanEval and MBPP inference will be restricted to a 2048-token total context [^1].
+> EvalPlus's embedded vLLM backend remains restricted to a 2,048-token total
+> context [^1]. The thinking profile therefore requires a separately configured
+> vLLM server. Do not reuse a result directory between profiles.
 
 ### SkyThought Evals
 
@@ -90,4 +164,5 @@ Post trained Qwen model (about 30 mins)
 
 There are multiple backends supported in the [official guide](https://github.com/NovaSky-AI/SkyThought/tree/main/skythought/evals). For example, `ray` backend on top of `vllm` is recommended for high throughput.
 
-[^1] : `evalplus` library [hardcodes](https://github.com/evalplus/evalplus/blob/26d6d00bb1fd0fa37f39c99d5290da67891d1c5e/evalplus/provider/vllm.py#L45) `vllm` maximum model length to 2048.
+[^1]: EvalPlus's decoder [defaults generation to 768 tokens](https://github.com/evalplus/evalplus/blob/master/evalplus/provider/base.py#L11), while its embedded vLLM provider [hardcodes the maximum model length to 2,048](https://github.com/evalplus/evalplus/blob/master/evalplus/provider/vllm.py#L41).
+[^2]: The [Qwen3.5-4B model card](https://huggingface.co/Qwen/Qwen3.5-4B) recommends `temperature=0.6`, `top_p=0.95`, and `top_k=20` for precise coding tasks in thinking mode, with 32,768 output tokens for most queries.

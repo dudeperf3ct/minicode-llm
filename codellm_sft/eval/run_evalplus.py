@@ -77,7 +77,14 @@ def install_model_factory(max_new_tokens: int) -> None:
         if backend == "openai":
             from evalplus.provider.openai import OpenAIChatDecoder
 
-            return OpenAIChatDecoder(
+            class NullSafeOpenAIChatDecoder(OpenAIChatDecoder):
+                def codegen(
+                    self, prompt: str, do_sample: bool = True, num_samples: int = 200
+                ) -> list[str]:
+                    outputs = super().codegen(prompt, do_sample, num_samples)
+                    return [output or "" for output in outputs]
+
+            return NullSafeOpenAIChatDecoder(
                 name=kwargs["model"],
                 batch_size=kwargs["batch_size"],
                 temperature=kwargs["temperature"],

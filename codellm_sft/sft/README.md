@@ -57,8 +57,7 @@ uv pip install \
   --index-url https://download.pytorch.org/whl/cu128
 ```
 
-Install the Qwen3.5 Gated DeltaNet dependencies. Transformers requires both
-Flash Linear Attention and causal-conv1d for its Qwen3.5 fast path:
+Install the Qwen3.5 Gated DeltaNet dependencies. Transformers requires both Flash Linear Attention and causal-conv1d for its Qwen3.5 fast path:
 
 ```bash
 uv pip install 'flash-linear-attention==0.4.1'
@@ -426,7 +425,6 @@ run record by its explicit `wandb_run_id`. It adds the test summary metrics and 
 
 > [!WARNING]
 > The evaluator executes model-generated Python. Run it only inside the
-> disposable experiment VM, never on a workstation containing credentials or
-> important files.
+> disposable experiment VM, never on a workstation containing credentials or important files.
 
 vLLM documents request-level `chat_template_kwargs` for controlling Qwen thinking mode in its [reasoning-output guide](https://docs.vllm.ai/en/stable/features/reasoning_outputs/).

@@ -301,10 +301,32 @@ Run one experiment at a time across both GPUs with DDP when clean throughput com
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Direct LoRA | 8 | 1 | 2 | 16 | 18.16 GiB | 2h 28m 23s |
 | Direct full FT | 8 | 1 | 2 | 16 | 44.96 GiB | 2h 24m 29s |
-| Reasoning LoRA | 4 | 2 | 2 | 16 | Not measured | Not measured |
-| Reasoning full FT | 4 | 2 | 2 | 16 | Not measured | Not measured |
+| Reasoning LoRA | 4 | 2 | 2 | 16 | Not measured | 9h 9m 40s |
+| Reasoning full FT | 4 | 2 | 2 | 16 | Not measured | 9h 14m 40s |
 
-The direct figures are observed two-H100 results, not ideal-scaling estimates. Those two jobs overlapped on the same instance: elapsed time from the first trainer start to the final save was 2h 30m 39s, costing about $21.04 at $8.38/hour. Summing their individual runtimes gives 4h 52m 52s, or about $40.90, as a rough sequential planning value.
+The runtimes are observed two-H100 results, not ideal-scaling estimates. The two direct jobs overlapped on the same instance: elapsed time from the first trainer start to the final save was 2h 30m 39s, costing about $21.04 at $8.38/hour. Summing their individual runtimes gives 4h 52m 52s, or about $40.90, as a rough sequential planning value.
+
+### Training Costs
+
+The following estimates apply the recorded `train_runtime` to the Lambda Cloud instance prices above.
+
+The one-H100 rate is used for the 32-example overfit and 1K pilot stages; the two-H100 instance rate is used for the 10K stage. The two-H100 price is already the complete instance price and is not multiplied by the GPU count again.
+
+| Stage | Run | Instance | Observed runtime | Standalone cost |
+| --- | --- | --- | ---: | ---: |
+| 32-example overfit | Direct LoRA | 1 x H100 | 8m 6s | $0.58 |
+| 32-example overfit | Reasoning LoRA | 1 x H100 | 12m 39s | $0.90 |
+| 32-example smoke | Direct full FT | 1 x H100 | 39s | $0.05 |
+| 1K pilot | Direct LoRA | 1 x H100 | 28m 30s | $2.04 |
+| 1K pilot | Direct full FT | 1 x H100 | 27m | $1.93 |
+| 1K pilot | Reasoning LoRA | 1 x H100 | 1h 55m 38s | $8.27 |
+| 1K pilot | Reasoning full FT | 1 x H100 | 1h 53m 7s | $8.09 |
+| 10K main | Direct LoRA | 2 x H100 | 2h 28m 23s | $20.72 |
+| 10K main | Direct full FT | 2 x H100 | 2h 24m 29s | $20.18 |
+| 10K main | Reasoning LoRA | 2 x H100 | 9h 9m 40s | $76.77 |
+| 10K main | Reasoning full FT | 2 x H100 | 9h 14m 40s | $77.47 |
+
+Adding every run as if it occupied its instance alone gives a standalone total of about **$217.00**. Several jobs shared an instance concurrently, so the more representative training cost is approximately **$184.93**: $1.36 for the overlapping overfit jobs, $8.29 for the overlapping pilots, $21.04 for the overlapping direct 10K jobs, and $154.24 for the sequential reasoning 10K jobs.
 
 ```bash
 mkdir -p logs/main
@@ -339,12 +361,7 @@ Run the untouched 500-example test split only after the four 10K runs and all tr
 
 Direct requests set `enable_thinking: false`; reasoning requests set it to `true`.
 
-The editable project install includes the pinned `pytest` runner used for private tests.
-
-Create a dedicated held-out inference environment. Qwen3.5 requires the current
-vLLM nightly line, and a clean environment lets `uv` install a mutually
-compatible vLLM, PyTorch, and CUDA runtime without changing the Axolotl training
-environment:
+Create a dedicated held-out inference environment. Qwen3.5 requires the current vLLM nightly line, and a clean environment lets `uv` install a mutually compatible vLLM, PyTorch, and CUDA runtime without changing the Axolotl training environment:
 
 ```bash
 uv venv .venv-vllm --python 3.12 --seed

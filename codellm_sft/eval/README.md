@@ -16,12 +16,9 @@ To run evaluation benchmark, we will use [evalplus](https://github.com/evalplus/
 
 Hardware: 1 x A100 40 GB SXM4 ($1.99/hr July 2026 on Lambda Labs)
 
-For fair comparison with the completed base and SFT evaluations, the `direct`
-profile retains the original EvalPlus protocol: greedy decoding, a 768-token
-generation limit, and EvalPlus's 2,048-token embedded-vLLM context limit [^1].
-The separate `thinking` profile follows the Qwen3.5 thinking-mode recommendation
-with temperature `0.6` and a 32,768-token generation limit [^2]. Thinking scores
-are a higher-compute capability reference rather than an equal-compute comparison.
+For fair comparison with the completed base and SFT evaluations, the `direct` profile retains the original EvalPlus protocol: greedy decoding, a 768-token generation limit, and EvalPlus's 2,048-token embedded-vLLM context limit [^1].
+
+The separate `thinking` profile follows the Qwen3.5 thinking-mode recommendation with temperature `0.6` and a 32,768-token generation limit [^2]. Thinking scores are a higher-compute capability reference rather than an equal-compute comparison.
 
 ## Running evaluation benchmark
 
@@ -40,10 +37,7 @@ uv pip install --upgrade \
   "evalplus[vllm] @ git+https://github.com/evalplus/evalplus.git@26d6d00bb1fd0fa37f39c99d5290da67891d1c5e"
 ```
 
-`run_evalplus.sh` runs both HumanEval and MBPP. Existing two-argument commands
-default to the `direct` profile and remain compatible with previously generated
-results. Each result directory receives a `protocol.json`; the runner refuses to
-reuse that directory with incompatible settings.
+`run_evalplus.sh` runs both HumanEval and MBPP. Existing two-argument commands default to the `direct` profile and remain compatible with previously generated results. Each result directory receives a `protocol.json`; the runner refuses to reuse that directory with incompatible settings.
 
 Running the HumanEval and MBPP benchmarks,
 
@@ -75,8 +69,7 @@ An explicit generation limit can be supplied without changing the profile:
 
 ### Post-trained direct mode
 
-The post-trained checkpoint requires an OpenAI-compatible vLLM server so that
-thinking can be explicitly disabled. Start the server in one terminal:
+The post-trained checkpoint requires an OpenAI-compatible vLLM server so that thinking can be explicitly disabled. Start the server in one terminal:
 
 ```bash
 vllm serve Qwen/Qwen3.5-4B \
@@ -140,12 +133,19 @@ Install the library
 ```bash
 uv venv --python 3.12
 source .venv/bin/activate
-uv pip install "skythought @ git+https://github.com/dudeperf3ct/SkyThought.git@feat/qwen35-livecodebench-v5"
+uv pip install msgpack \
+  "skythought @ git+https://github.com/dudeperf3ct/SkyThought.git@feat/qwen35-livecodebench-v5"
 ```
 
-Run the LiveCodeBench benchmark,
+The runner evaluates the Easy, Medium, and Hard subsets:
 
-Base Qwen model (about 30 mins)
+```text
+./run_skythought.sh MODEL RESULT_DIR [direct|thinking] [BASE_URL]
+```
+
+The `direct` profile uses greedy decoding with at most 16,384 output tokens. The `thinking` profile uses temperature `0.6`, top-p `0.95`, and at most 32,768 output tokens.
+
+Run the base model directly through the embedded vLLM backend:
 
 ```bash
 ./run_skythought.sh \
@@ -153,14 +153,49 @@ Base Qwen model (about 30 mins)
   results/qwen3.5-4b-base/livecodebench
 ```
 
-Post trained Qwen model (about 30 mins)
+For the post-trained model, use OpenAI-compatible vLLM servers so thinking can be controlled explicitly. On a two-GPU machine, start direct mode on GPU 0:
 
 ```bash
-./run_skythought.sh \
-  "Qwen/Qwen3.5-4B" \
-  "results/qwen3.5-4b-post-trained/livecodebench"
+CUDA_VISIBLE_DEVICES=0 vllm serve Qwen/Qwen3.5-4B \
+  --served-model-name qwen35-4b-post-direct \
+  --reasoning-parser qwen3 \
+  --default-chat-template-kwargs '{"enable_thinking": false}' \
+  --language-model-only \
+  --dtype bfloat16 \
+  --max-model-len 32768 \
+  --gpu-memory-utilization 0.80 \
+  --port 8000
 ```
 
+Start thinking mode on GPU 1. Its 65,536-token context leaves room for both the prompt and the 32,768-token output budget:
+
+```bash
+CUDA_VISIBLE_DEVICES=1 vllm serve Qwen/Qwen3.5-4B \
+  --served-model-name qwen35-4b-post-thinking \
+  --reasoning-parser qwen3 \
+  --default-chat-template-kwargs '{"enable_thinking": true}' \
+  --language-model-only \
+  --dtype bfloat16 \
+  --max-model-len 65536 \
+  --gpu-memory-utilization 0.80 \
+  --port 8001
+```
+
+Run both evaluations from the evaluation environment:
+
+```bash
+OPENAI_API_KEY=EMPTY ./run_skythought.sh \
+  qwen35-4b-post-direct \
+  results/qwen3.5-4b-post-trained/direct/livecodebench \
+  direct \
+  http://127.0.0.1:8000/v1
+
+OPENAI_API_KEY=EMPTY ./run_skythought.sh \
+  qwen35-4b-post-thinking \
+  results/qwen3.5-4b-post-trained/thinking/livecodebench \
+  thinking \
+  http://127.0.0.1:8001/v1
+```
 
 There are multiple backends supported in the [official guide](https://github.com/NovaSky-AI/SkyThought/tree/main/skythought/evals). For example, `ray` backend on top of `vllm` is recommended for high throughput.
 

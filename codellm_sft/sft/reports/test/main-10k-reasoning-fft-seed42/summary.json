@@ -1,0 +1,126 @@
+{
+  "api_errors": 0,
+  "average_output_tokens": 6358.996,
+  "code_present_but_not_extracted": 0,
+  "contains_final_code": {
+    "count": 360,
+    "rate": 0.72
+  },
+  "contains_think": {
+    "count": 500,
+    "rate": 1.0
+  },
+  "evaluator_version": 2,
+  "examples": 500,
+  "extraction_failures": 140,
+  "mode": "reasoning",
+  "model": "main-10k-reasoning-fft-seed42",
+  "pass_rate": 0.49,
+  "pass_rate_by_difficulty": {
+    "easy": {
+      "examples": 304,
+      "pass_rate": 0.5789473684210527,
+      "passed": 176
+    },
+    "hard": {
+      "examples": 85,
+      "pass_rate": 0.3058823529411765,
+      "passed": 26
+    },
+    "medium": {
+      "examples": 111,
+      "pass_rate": 0.38738738738738737,
+      "passed": 43
+    }
+  },
+  "pass_rate_by_style": {
+    "complete": {
+      "examples": 250,
+      "pass_rate": 0.564,
+      "passed": 141
+    },
+    "instruct": {
+      "examples": 217,
+      "pass_rate": 0.3824884792626728,
+      "passed": 83
+    },
+    "online_judge": {
+      "examples": 33,
+      "pass_rate": 0.6363636363636364,
+      "passed": 21
+    }
+  },
+  "pass_rate_by_subset": {
+    "Algorithm": {
+      "examples": 43,
+      "pass_rate": 0.5581395348837209,
+      "passed": 24
+    },
+    "Apps": {
+      "examples": 32,
+      "pass_rate": 0.5625,
+      "passed": 18
+    },
+    "Code_Contests": {
+      "examples": 35,
+      "pass_rate": 0.37142857142857144,
+      "passed": 13
+    },
+    "Codeforces": {
+      "examples": 32,
+      "pass_rate": 0.625,
+      "passed": 20
+    },
+    "Data_Structure": {
+      "examples": 47,
+      "pass_rate": 0.5106382978723404,
+      "passed": 24
+    },
+    "Docs": {
+      "examples": 32,
+      "pass_rate": 0.3125,
+      "passed": 10
+    },
+    "Evol": {
+      "examples": 18,
+      "pass_rate": 0.5555555555555556,
+      "passed": 10
+    },
+    "Filter": {
+      "examples": 55,
+      "pass_rate": 0.38181818181818183,
+      "passed": 21
+    },
+    "Leetcode": {
+      "examples": 44,
+      "pass_rate": 0.36363636363636365,
+      "passed": 16
+    },
+    "Package": {
+      "examples": 9,
+      "pass_rate": 0.6666666666666666,
+      "passed": 6
+    },
+    "Prefill": {
+      "examples": 60,
+      "pass_rate": 0.55,
+      "passed": 33
+    },
+    "Taco": {
+      "examples": 93,
+      "pass_rate": 0.5376344086021505,
+      "passed": 50
+    }
+  },
+  "passed": 245,
+  "syntax_errors": 0,
+  "test_dataset": {
+    "repo_id": "dudeperf3ct/qwen35-kodcode-sft-private-test",
+    "revision": "8fbebc91f03fa40703b03a00879a3c651acaccd4",
+    "split": "test"
+  },
+  "test_timeouts": 1,
+  "truncations": 139,
+  "wandb_name": "main-10k-reasoning-fft-seed42",
+  "wandb_run_id": "main-10k-reasoning-fft-seed42"
+}

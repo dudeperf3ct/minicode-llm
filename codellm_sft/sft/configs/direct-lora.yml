@@ -1,0 +1,85 @@
+base_model: Qwen/Qwen3.5-4B-Base
+revision_of_model: 1001bb4d826a52d1f399e183466143f4da7b741b
+
+plugins:
+  - axolotl.integrations.cut_cross_entropy.CutCrossEntropyPlugin
+strict: false
+
+chat_template: qwen3_5
+eot_tokens:
+  - <|im_end|>
+
+datasets:
+  - path: dudeperf3ct/qwen35-kodcode-sft-data
+    name: direct
+    revision: db5f9912d76642bac325bea2bb41d83ad186365b
+    split: train
+    type: chat_template
+    field_messages: messages
+    roles_to_train:
+      - assistant
+    split_thinking: false
+    train_on_eos: turn
+    train_on_eot: turn
+
+test_datasets:
+  - path: dudeperf3ct/qwen35-kodcode-sft-data
+    name: direct
+    revision: db5f9912d76642bac325bea2bb41d83ad186365b
+    split: validation
+    type: chat_template
+    field_messages: messages
+    roles_to_train:
+      - assistant
+    split_thinking: false
+    train_on_eos: turn
+    train_on_eot: turn
+
+seed: 42
+dataset_prepared_path: ./prepared/p2-10k-direct-lora-s42
+output_dir: ./outputs/p2-10k-direct-lora-s42
+hub_model_id: dudeperf3ct/qwen35-4b-kodcode-sft-10k
+hub_revision: direct-lora
+hub_strategy: checkpoint
+
+sequence_len: 16384
+excess_length_strategy: raise
+sample_packing: false
+pad_to_sequence_len: false
+
+micro_batch_size: 8
+gradient_accumulation_steps: 1
+num_epochs: 2
+
+bf16: true
+tf32: true
+
+gradient_checkpointing: true
+gradient_checkpointing_kwargs:
+  use_reentrant: false
+
+attn_implementation: flash_attention_3
+
+optimizer: adamw_torch_fused
+lr_scheduler: cosine
+learning_rate: 0.0001
+warmup_ratio: 0.03
+weight_decay: 0.0
+
+adapter: lora
+load_in_4bit: false
+load_in_8bit: false
+lora_r: 64
+lora_alpha: 128
+lora_dropout: 0.05
+lora_target_modules: '^model\.language_model\.layers\.\d+\.(?:self_attn\.(?:q_proj|k_proj|v_proj|o_proj)|mlp\.(?:gate_proj|up_proj|down_proj)|linear_attn\.(?:in_proj_qkv|in_proj_z|out_proj))$'
+
+logging_steps: 5
+evals_per_epoch: 4
+saves_per_epoch: 2
+
+use_wandb: true
+wandb_entity: dudeperf3ct
+wandb_project: qwen35-4b-kodcode-sft
+wandb_name: main-10k-direct-lora-seed42
+wandb_run_id: main-10k-direct-lora-seed42

@@ -1,0 +1,87 @@
+{
+  "dataset": "dudeperf3ct/qwen35-kodcode-sft-data",
+  "dataset_name": "reasoning",
+  "dataset_revision": "db5f9912d76642bac325bea2bb41d83ad186365b",
+  "dataset_split": "overfit",
+  "examples": 32,
+  "inspected_examples": [
+    {
+      "assistant_eot_index": 1819,
+      "first_trainable_index": 400,
+      "id": "Docs: Python310_29906_C",
+      "masked_tokens": 401,
+      "thinking_close_trainable": true,
+      "thinking_content_present": true,
+      "thinking_open_trainable": false,
+      "total_tokens": 1821,
+      "trainable_tokens": 1420
+    },
+    {
+      "assistant_eot_index": 12037,
+      "first_trainable_index": 186,
+      "id": "Taco_26229_C",
+      "masked_tokens": 187,
+      "thinking_close_trainable": true,
+      "thinking_content_present": true,
+      "thinking_open_trainable": false,
+      "total_tokens": 12039,
+      "trainable_tokens": 11852
+    },
+    {
+      "assistant_eot_index": 4534,
+      "first_trainable_index": 306,
+      "id": "Leetcode_12001_C",
+      "masked_tokens": 307,
+      "thinking_close_trainable": true,
+      "thinking_content_present": true,
+      "thinking_open_trainable": false,
+      "total_tokens": 4536,
+      "trainable_tokens": 4229
+    },
+    {
+      "assistant_eot_index": 6492,
+      "first_trainable_index": 308,
+      "id": "Taco_67737_C",
+      "masked_tokens": 309,
+      "thinking_close_trainable": true,
+      "thinking_content_present": true,
+      "thinking_open_trainable": false,
+      "total_tokens": 6494,
+      "trainable_tokens": 6185
+    },
+    {
+      "assistant_eot_index": 4463,
+      "first_trainable_index": 737,
+      "id": "Algorithm_23775_I",
+      "masked_tokens": 738,
+      "thinking_close_trainable": true,
+      "thinking_content_present": true,
+      "thinking_open_trainable": false,
+      "total_tokens": 4465,
+      "trainable_tokens": 3727
+    }
+  ],
+  "masked_tokens": 11181,
+  "model": "Qwen/Qwen3.5-4B-Base",
+  "prepared_dataset": "prepared/label-audit/reasoning/c84f09b6ba2be9c45f8cda86108de37a",
+  "revision": "1001bb4d826a52d1f399e183466143f4da7b741b",
+  "status": "passed",
+  "total_length": {
+    "maximum": 12039,
+    "median": 4163.5,
+    "p90": 9728,
+    "p95": 11828,
+    "p99": 12039
+  },
+  "total_tokens": 152439,
+  "trainable_length": {
+    "maximum": 11852,
+    "median": 3758.5,
+    "p90": 9500,
+    "p95": 11074,
+    "p99": 11852
+  },
+  "trainable_token_fraction": 0.9266526282644205,
+  "trainable_tokens": 141258,
+  "variant": "reasoning"
+}

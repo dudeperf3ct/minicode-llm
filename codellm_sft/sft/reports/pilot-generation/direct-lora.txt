@@ -1,0 +1,115 @@
+Loading weights:   0%|          | 0/723 [00:00<?, ?it/s]Loading weights:   0%|          | 1/723 [00:00<01:29,  8.09it/s]Loading weights:   6%|▌         | 40/723 [00:00<00:03, 211.68it/s]Loading weights:  11%|█         | 80/723 [00:00<00:02, 287.58it/s]Loading weights:  17%|█▋        | 121/723 [00:00<00:01, 332.55it/s]Loading weights:  22%|██▏       | 156/723 [00:00<00:01, 322.05it/s]Loading weights:  28%|██▊       | 201/723 [00:00<00:01, 357.61it/s]Loading weights:  34%|███▍      | 248/723 [00:00<00:01, 389.55it/s]Loading weights:  40%|███▉      | 288/723 [00:00<00:01, 376.88it/s]Loading weights:  46%|████▌     | 329/723 [00:00<00:01, 385.26it/s]Loading weights:  51%|█████     | 368/723 [00:01<00:00, 385.24it/s]Loading weights:  57%|█████▋    | 412/723 [00:01<00:00, 399.57it/s]Loading weights:  66%|██████▌   | 474/723 [00:01<00:00, 464.33it/s]Loading weights:  88%|████████▊ | 638/723 [00:01<00:00, 811.28it/s]Loading weights: 100%|██████████| 723/723 [00:01<00:00, 514.18it/s]
+
+================================================================================
+ID: Codeforces_17592_C
+from typing import List
+
+def count_elements_greater_than_previous(n: int, elements: List[int]) -> int:
+    count = 0
+    for i in range(1, n):
+        if elements[i] > elements[i-1]:
+            count += 1
+    return count
+<|im_end|>
+
+================================================================================
+ID: Apps_4624_C
+def histogram_equalization(image):
+    if not image:
+        return []
+    if not image[0]:
+        return []
+
+    # Flatten the image to a list of pixel values
+    pixels = [pixel for row in image for pixel in row]
+
+    # Count the frequency of each pixel value
+    freq = {}
+    for p in pixels:
+        freq[p] = freq.get(p, 0) + 1
+
+    # Calculate the total number of pixels
+    total = len(pixels)
+
+    # Calculate the cumulative distribution function (CDF)
+    cdf = {}
+    sorted_keys = sorted(freq.keys())
+    cumulative = 0
+    for key in sorted_keys:
+        cumulative += freq[key]
+        cdf[key] = cumulative
+
+    # Calculate the new pixel values
+    new_pixels = []
+    for p in pixels:
+        if p in cdf:
+            new_pixels.append(cdf[p])
+
+    # Reshape the new pixels back into the original image dimensions
+    new_image = []
+    for i in range(0, len(new_pixels), len(image[0])):
+        new_image.append(new_pixels[i:i + len(image[0])])
+
+    return new_image
+<|im_end|>
+
+================================================================================
+ID: Leetcode_5464_C
+def evaluateExpression(expression: str) -> int:
+    stack = []
+    current = 0
+    sign = 1
+    for char in expression:
+        if char.isdigit():
+            current = current * 10 + int(char)
+        elif char in '+-':
+            stack.append(sign * current)
+            current = 0
+            sign = 1 if char == '+' else -1
+        elif char == '(':
+            stack.append(current)
+            current = 0
+        elif char == ')':
+            stack.append(current)
+            current = 0
+    stack.append(sign * current)
+    result = 0
+    while stack:
+        result += stack.pop()
+    return result
+<|im_end|>
+
+================================================================================
+ID: Apps_14307_C
+def trap(height):
+    if not height:
+        return 0
+    n = len(height)
+    left_max = [0] * n
+    right_max = [0] * n
+    left_max[0] = height[0]
+    for i in range(1, n):
+        left_max[i] = max(left_max[i-1], height[i])
+    right_max[-1] = height[-1]
+    for i in range(n-2, -1, -1):
+        right_max[i] = max(right_max[i+1], height[i])
+    total = 0
+    for i in range(n):
+        total += min(left_max[i], right_max[i]) - height[i]
+    return total
+<|im_end|>
+
+================================================================================
+ID: Code_Contests_35583_C
+def count_distinct_values(test_cases):
+    return [len(set(case)) for case in test_cases]
+
+def parse_input(input_string):
+    lines = input_string.strip().split('\n')
+    n = int(lines[0])
+    test_cases = []
+    for i in range(1, n + 1):
+        case = list(map(int, lines[i].split()))
+        test_cases.append(case)
+    return test_cases
+<|im_end|>

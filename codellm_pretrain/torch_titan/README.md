@@ -47,7 +47,7 @@ wandb login
 ## Debugging
 
 > [!WARNING]
-> I am using Lambda Labs GPU instance with 1xH100 GPU (80 GB SMX5) for debugging. It costs about **$2** to run these.
+> I am using Lambda Labs GPU instance with 1xH100 GPU (80 GB SMX5) for debugging. It costs about **$2/hr**.
 
 Make a copy of the training configuration files and local overrides to torchtitan's directory.
 

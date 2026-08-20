@@ -1,0 +1,100 @@
+# Step 3 gate config: overfit a tiny streamed subset (first 5 rows).
+
+seed: 42
+
+step_scheduler:
+  global_batch_size: 8
+  local_batch_size: 4 # Grad acc steps = global_batch_size // local_batch_size = 2
+  ckpt_every_steps: 300
+  max_steps: 600
+
+dist_env:
+  backend: nccl
+  timeout_minutes: 5
+
+model:
+  _target_: nemo_automodel.NeMoAutoModelForCausalLM.from_config
+  force_hf: true
+  config:
+    _target_: transformers.AutoConfig.from_pretrained
+    pretrained_model_name_or_path: meta-llama/Llama-3.2-1B
+    vocab_size: 32768
+    max_position_embeddings: 8192
+    bos_token_id: 0
+    eos_token_id: 0
+    pad_token_id: 6
+
+checkpoint:
+  enabled: true
+  checkpoint_dir: checkpoints/swallow_fim_overfit_tiny
+  model_save_format: safetensors
+  save_consolidated: true
+
+distributed:
+  strategy: fsdp2
+  dp_size: none
+  tp_size: 1
+  cp_size: 1
+  sequence_parallel: false
+
+loss_fn:
+  _target_: nemo_automodel.components.loss.masked_ce.MaskedCrossEntropy
+
+dataset:
+  _target_: dataset.swallow_fim_iterable_dataset.SwallowCodeFIMIterableDataset
+  hf_config:
+    _target_: dataset.swallow_fim_iterable_dataset.HFDatasetConfig
+    path: tokyotech-llm/swallow-code-v2
+    subset: swallowcode-v2
+    split: train
+    text_field: improved_code
+  seq_len: 2048
+  infinite: true
+  samples_per_epoch: 2400
+  max_rows_per_epoch: 5
+  vary_fim_across_epochs: false
+  shuffle_buffer_size: 0
+  seed: 42
+  tokenizer:
+    _target_: nemo_automodel._transformers.auto_tokenizer.NeMoAutoTokenizer.from_pretrained
+    pretrained_model_name_or_path: dudeperf3ct/codellm-tokenizer
+    eos_token: <|endoftext|>
+    bos_token: <|endoftext|>
+    pad_token: <pad>
+  fim_config:
+    _target_: dataset.swallow_fim_iterable_dataset.FIMConfig
+    fim_rate: 1.0
+    psm_prob: 0.5
+    spm_prob: 0.5
+    min_code_length: 1
+
+packed_sequence:
+  packed_sequence_size: 0
+
+dataloader:
+  _target_: torchdata.stateful_dataloader.StatefulDataLoader
+  batch_size: 2
+  drop_last: true
+  collate_fn: torch.utils.data.default_collate
+  shuffle: false
+  num_workers: 0
+  pin_memory: false
+
+optimizer:
+  _target_: torch.optim.AdamW
+  betas: [0.9, 0.95]
+  eps: 1.0e-8
+  lr: 8.0e-4
+  weight_decay: 0.0
+
+lr_scheduler:
+  lr_decay_style: cosine
+  lr_warmup_steps: 40
+  min_lr: 0.0
+
+clip_grad_norm:
+  max_norm: 1.0
+
+wandb:
+  project: nemo
+  name: overfit tiny subset

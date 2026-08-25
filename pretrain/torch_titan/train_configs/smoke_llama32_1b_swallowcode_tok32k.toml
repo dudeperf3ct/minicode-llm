@@ -1,0 +1,111 @@
+# Reference: github.com/pytorch/torchtitan/blob/main/torchtitan/models/llama3/train_configs/debug_model.toml
+
+# Job config: https://github.com/pytorch/torchtitan/blob/81af8833ddeff9b5f1874dc7e20594aa17da6b86/torchtitan/config/job_config.py#L18
+[job]
+dump_folder = "./outputs/smoke_llama32_1b_swallowcode_tok32k"
+description = "Llama 3.2 1B + SwallowCode + CodeLLM tokenizer (32k) - smoke test"
+print_config = true
+custom_config_module = "torchtitan.experiments.transformers_modeling_backend.job_config"
+
+[experimental]
+custom_import = "torchtitan.custom_spec"
+
+# Profiling config:
+[profiling]
+enable_profiling = true
+save_traces_folder = "profile_trace"
+profile_freq = 400
+enable_memory_snapshot = true
+save_memory_snapshot_folder = "memory_snapshot"
+
+# Metrics config: https://github.com/pytorch/torchtitan/blob/81af8833ddeff9b5f1874dc7e20594aa17da6b86/torchtitan/config/job_config.py#L74
+[metrics]
+log_freq = 50
+disable_color_printing = false
+enable_tensorboard = false
+save_tb_folder = "tb"
+save_for_all_ranks = true
+enable_wandb = true
+
+# Model config:
+[model]
+name = "transformers_modeling_backend_custom"
+flavor = "llama32_1b_tok32k"
+hf_assets_path = "./hf_assets/tokenizer"
+# Note: tokenizer loaded from hf_assets_path via HuggingFaceTokenizer
+# This feature requires torchao. It swaps `torch.nn.Linear` with `Float8Linear for example.
+# converters = ["float8"]
+
+[hf_transformers]
+model = "meta-llama/Llama-3.2-1B"
+
+# Optimiser config: https://github.com/pytorch/torchtitan/blob/81af8833ddeff9b5f1874dc7e20594aa17da6b86/torchtitan/config/job_config.py#L134
+[optimizer]
+name = "AdamW"
+lr = 3e-4
+beta1 = 0.9
+beta2 = 0.95
+eps = 1e-8
+weight_decay = 0.1
+implementation = "fused"
+
+# LR scheduler config: https://github.com/pytorch/torchtitan/blob/81af8833ddeff9b5f1874dc7e20594aa17da6b86/torchtitan/config/job_config.py#L169
+[lr_scheduler]
+warmup_steps = 1000
+decay_ratio = 1.0
+decay_type = "cosine"
+min_lr_factor = 0.0
+
+# Dataloader config: https://github.com/pytorch/torchtitan/blob/81af8833ddeff9b5f1874dc7e20594aa17da6b86/torchtitan/config/job_config.py#L201
+[training.dataloader]
+num_workers = 4
+pin_memory = true
+persistent_workers = true
+prefetch_factor = 2
+
+# Training config: https://github.com/pytorch/torchtitan/blob/81af8833ddeff9b5f1874dc7e20594aa17da6b86/torchtitan/config/job_config.py#L235
+[training]
+local_batch_size = 6
+seq_len = 8192
+max_norm = 1.0  # grad norm clipping
+# global_batch_size defaults to local_batch_size * data_parallel_degree.
+# If training.global_batch_size is set, TorchTitan derives gradient accumulation steps.
+steps = 1000
+dataset = "swallowcode"
+dtype = "bfloat16"
+mixed_precision_param = "bfloat16" # only works if when data_parallel_shard_degree > 1 or context_parallel_degree > 1
+mixed_precision_reduce = "float32"
+
+[parallelism]
+data_parallel_replicate_degree = 1
+data_parallel_shard_degree = 1
+fsdp_reshard_after_forward = "default" # default / never / always
+tensor_parallel_degree = 1
+enable_async_tensor_parallel = false
+pipeline_parallel_degree = 1
+pipeline_parallel_schedule = "Interleaved1F1B"
+context_parallel_degree = 1
+
+[checkpoint]
+enable = true
+folder = "checkpoint"
+interval = 500
+last_save_model_only = false
+export_dtype = "bfloat16"
+async_mode = "disabled"  # ["disabled", "async", "async_with_pinned_mem"]
+
+[activation_checkpoint]
+mode = "none"  # ["none", "selective", "full"]
+selective_ac_option = '2'  # 'int' = ac every positive int layer or 'op', ac based on ops policy
+
+[compile]
+enable=true
+components = ["model", "loss"]
+
+[quantize.linear.float8]
+enable_fsdp_float8_all_gather = false
+precompute_float8_dynamic_scale_for_fsdp = false
+filter_fqns = ["output"]
+
+[validation]
+enable = false

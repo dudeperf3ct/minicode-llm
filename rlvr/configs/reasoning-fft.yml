@@ -1,0 +1,107 @@
+base_model: dudeperf3ct/qwen35-4b-kodcode-sft-10k
+revision_of_model: eed04fa11c7b7a9bbd4a129471d1a4e9bd2e1ece
+
+rl: grpo
+strict: false
+
+chat_template: qwen3_5
+eot_tokens:
+  - <|im_end|>
+
+datasets:
+  - path: dudeperf3ct/qwen35-kodcode-rlvr-data
+    revision: 6cd21d8893dd70d8055706ed9c58c374666b7bd0
+    split: train
+
+skip_prepare_dataset: true
+remove_unused_columns: false
+val_set_size: 0.0
+shuffle_merged_datasets: false
+
+seed: 42
+dataset_prepared_path: ./prepared/main-1k-reasoning-fft-grpo-lora-seed42
+output_dir: ./outputs/main-1k-reasoning-fft-grpo-lora-seed42
+
+sequence_len: 8192
+sample_packing: false
+pad_to_sequence_len: false
+
+micro_batch_size: 1
+gradient_accumulation_steps: 8
+num_epochs: 1
+
+bf16: true
+tf32: true
+
+gradient_checkpointing: true
+gradient_checkpointing_kwargs:
+  use_reentrant: false
+
+attn_implementation: flash_attention_3
+
+optimizer: adamw_torch_fused
+lr_scheduler: cosine
+learning_rate: 0.000005
+warmup_ratio: 0.03
+weight_decay: 0.0
+max_grad_norm: 1.0
+
+adapter: lora
+load_in_4bit: false
+load_in_8bit: false
+lora_r: 32
+lora_alpha: 64
+lora_dropout: 0.0
+lora_target_modules: '^model\.language_model\.layers\.\d+\.(?:self_attn\.(?:q_proj|k_proj|v_proj|o_proj)|mlp\.(?:gate_proj|up_proj|down_proj)|linear_attn\.(?:in_proj_qkv|in_proj_z|out_proj))$'
+
+vllm:
+  host: 0.0.0.0
+  port: 8000
+  tensor_parallel_size: 1
+  gpu_memory_utilization: 0.85
+  dtype: bfloat16
+  max_model_len: 8192
+  enable_prefix_caching: true
+  enforce_eager: true
+
+trl:
+  use_vllm: true
+  vllm_mode: server
+  use_data_producer: true
+  async_prefetch: false
+  vllm_server_host: 127.0.0.1
+  vllm_server_port: 8000
+  vllm_server_timeout: 600
+  vllm_lora_sync: true
+  vllm_sync_interval: 1
+
+  generation_batch_size: 8
+  num_generations: 8
+  max_completion_length: 2048
+  temperature: 0.7
+  top_p: 0.95
+  chat_template_kwargs:
+    enable_thinking: true
+
+  reward_funcs:
+    - rlvr.rewards.code_reward
+  reward_weights:
+    - 1.0
+
+  beta: 0.04
+  num_iterations: 1
+  loss_type: grpo
+  scale_rewards: true
+  mask_truncated_completions: false
+  skip_zero_advantage_batches: true
+  replay_buffer_size: 0
+  reroll_start_fraction: 1.0
+
+logging_steps: 1
+saves_per_epoch: 2
+
+use_wandb: true
+wandb_entity: dudeperf3ct
+wandb_project: qwen35-4b-kodcode-rlvr
+wandb_name: main-1k-reasoning-fft-grpo-lora-seed42
+wandb_run_id: main-1k-reasoning-fft-grpo-lora-seed42

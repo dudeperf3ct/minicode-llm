@@ -1,0 +1,54 @@
+{
+  "base_model": {
+    "repo_id": "Qwen/Qwen3.5-4B-Base",
+    "revision": "1001bb4d826a52d1f399e183466143f4da7b741b"
+  },
+  "benchmarks": {
+    "humaneval": {
+      "config": "openai_humaneval",
+      "repo_id": "openai/openai_humaneval",
+      "revision": "7dce6050a7d6d172f3cc5c32aa97f52fa1a2e544",
+      "splits": [
+        "test"
+      ]
+    },
+    "livecodebench": {
+      "config": "release_v5",
+      "materialized_mirror": {
+        "repo_id": "lighteval/code_generation_lite",
+        "revision": "89e5fc5c2a8e748f50e95bc7235fab2372d49bfa"
+      },
+      "repo_id": "livecodebench/code_generation_lite",
+      "revision": "0fe84c3912ea0c4d4a78037083943e8f0c4dd505",
+      "splits": [
+        "test"
+      ]
+    },
+    "mbpp": {
+      "config": "full",
+      "repo_id": "google-research-datasets/mbpp",
+      "revision": "4bb6404fdc6cacfda99d4ac4205087b89d32030c",
+      "splits": [
+        "prompt",
+        "train",
+        "validation",
+        "test"
+      ]
+    }
+  },
+  "decontamination_reference": {
+    "path": "../common/src/common/decontamination.py",
+    "repo_id": "huggingface/open-r1",
+    "revision": "1416fa0cf21595d2083b399a2a0bbddd7f6e9563"
+  },
+  "source_dataset": {
+    "config": "default",
+    "repo_id": "KodCode/KodCode-V1-SFT-R1",
+    "revision": "26c8a11c800d71b6c4bafe12a92c9090ef0b6214",
+    "split": "train"
+  },
+  "tokenizer": {
+    "repo_id": "Qwen/Qwen3.5-4B-Base",
+    "revision": "1001bb4d826a52d1f399e183466143f4da7b741b"
+  }
+}

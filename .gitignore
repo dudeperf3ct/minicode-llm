@@ -203,9 +203,10 @@ __marimo__/
 
 # Datasets and logs
 data
-codellm_tokenizer/artifacts
-codellm_pretrain/torch_titan/checkpoint
-codellm_sft/sft/prepared/
-codellm_sft/sft/outputs/
-codellm_sft/sft/logs/
-codellm_sft/eval/results
+tokenizer/artifacts/
+pretrain/torch_titan/checkpoint/
+sft/prepared/
+sft/outputs/
+sft/logs/
+evals/results/
+evals/logs/

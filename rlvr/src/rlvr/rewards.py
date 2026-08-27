@@ -31,13 +31,7 @@ def code_reward(
     """Return one when public tests pass and zero for model-caused failures."""
 
     del prompts, kwargs
-    return score_completions(
-        completions,
-        test,
-        question_id,
-        style,
-        verifier=default_verifier(),
-    )
+    return score_completions(completions, test, question_id, style, verifier=default_verifier())
 
 
 def score_completions(

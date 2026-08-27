@@ -53,27 +53,76 @@ Every completion runs in a fresh Modal Sandbox with network access disabled. Mod
 The documented setup targets two x86_64 H100 GPUs: one for the vLLM rollout server and one for training.
 
 ```bash
-export UV_TORCH_BACKEND=cu128
-
 uv sync --group dev
 source .venv/bin/activate
 
 uv pip install \
   'torch==2.11.0' \
-  'torchvision==0.26.0'
+  'torchvision==0.26.0' \
+  --torch-backend=cu129
+
+uv pip install 'xformers==0.0.35'
 
 uv pip install --no-build-isolation \
-  'axolotl[vllm]==0.18.0' \
-  'vllm==0.25.1'
+  'axolotl==0.18.0'
 
 uv pip install \
-  'flash-attn-3==3.0.0' \
-  --index-url https://download.pytorch.org/whl/cu128
+  'https://github.com/vllm-project/vllm/releases/download/v0.23.0/vllm-0.23.0%2Bcu129-cp38-abi3-manylinux_2_28_x86_64.whl' \
+  --extra-index-url https://download.pytorch.org/whl/cu129
 
 uv pip install 'flash-linear-attention==0.4.1'
 
 uv pip install \
+  'flash-attn-3==3.0.0' \
+  --index-url https://download.pytorch.org/whl/cu129
+
+uv pip install \
   'https://huggingface.co/datasets/dudeperf3ct/qwen35-sft-wheels/resolve/main/causal-conv1d/py312-torch211-cu128/causal_conv1d-1.6.2.post1-cp312-cp312-linux_x86_64.whl'
+```
+
+Both configs enable LoRA-only vLLM synchronization.
+
+Verify the training dependencies:
+
+```bash
+python - <<'PY'
+from importlib.metadata import version
+
+import flash_attn_interface
+import torch
+import transformers
+
+print("torch:", torch.__version__)
+print("torch CUDA:", torch.version.cuda)
+print(
+    "GPUs:",
+    [torch.cuda.get_device_name(index) for index in range(torch.cuda.device_count())],
+)
+print("BF16:", torch.cuda.is_bf16_supported())
+print("axolotl:", version("axolotl"))
+print("vllm:", version("vllm"))
+print("transformers:", transformers.__version__)
+print("flash-attn-3:", version("flash-attn-3"))
+print("flash-linear-attention:", version("flash-linear-attention"))
+print("causal-conv1d:", version("causal-conv1d"))
+print("xformers:", version("xformers"))
+PY
+```
+
+Observed on the two-H100 smoke-test instance:
+
+```text
+torch: 2.11.0+cu129
+torch CUDA: 12.9
+GPUs: ['NVIDIA H100 80GB HBM3', 'NVIDIA H100 80GB HBM3']
+BF16: True
+axolotl: 0.18.0
+vllm: 0.23.0+cu129
+transformers: 5.14.1
+flash-attn-3: 3.0.0
+flash-linear-attention: 0.4.1
+causal-conv1d: 1.6.2.post1
+xformers: 0.0.35
 ```
 
 Authenticate all three services on the GPU machine. Hugging Face loads the pinned model and dataset, W&B records the run, and Modal executes rewards:

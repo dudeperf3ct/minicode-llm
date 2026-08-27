@@ -25,6 +25,10 @@ uv run eval-heldout \
   --output-root reports/test
 ```
 
+SFT configurations infer direct or reasoning mode from `split_thinking`.
+Other Axolotl configurations, such as RLVR, pass it explicitly with
+`--mode direct` or `--mode reasoning`.
+
 > [!WARNING]
 > The held-out verifier executes model-generated Python in local subprocesses.
 > Run it only inside a disposable experiment VM. Modal sandboxing is introduced

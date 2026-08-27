@@ -54,7 +54,7 @@ class ModalVerifier:
         for attempt in range(MAX_ATTEMPTS):
             try:
                 return self._verify_once(request)
-            except modal.Error as error:
+            except (modal.Error, TimeoutError, ConnectionError) as error:
                 if attempt == MAX_ATTEMPTS - 1:
                     raise RuntimeError(
                         f"Modal verification failed for {request.question_id} after "

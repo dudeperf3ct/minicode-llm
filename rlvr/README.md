@@ -66,6 +66,8 @@ uv pip install 'xformers==0.0.35'
 uv pip install --no-build-isolation \
   'axolotl==0.18.0'
 
+uv pip install 'modal==1.5.4'
+
 uv pip install \
   'https://github.com/vllm-project/vllm/releases/download/v0.23.0/vllm-0.23.0%2Bcu129-cp38-abi3-manylinux_2_28_x86_64.whl' \
   --extra-index-url https://download.pytorch.org/whl/cu129
@@ -80,7 +82,8 @@ uv pip install \
   'https://huggingface.co/datasets/dudeperf3ct/qwen35-sft-wheels/resolve/main/causal-conv1d/py312-torch211-cu128/causal_conv1d-1.6.2.post1-cp312-cp312-linux_x86_64.whl'
 ```
 
-Both configs enable LoRA-only vLLM synchronization.
+> [!WARNING]
+> Axolotl pins an older Modal client for its cloud launcher, so reinstall Modal after Axolotl to keep the verifier on the current Sandbox filesystem API.
 
 Verify the training dependencies:
 
@@ -100,6 +103,7 @@ print(
 )
 print("BF16:", torch.cuda.is_bf16_supported())
 print("axolotl:", version("axolotl"))
+print("modal:", version("modal"))
 print("vllm:", version("vllm"))
 print("transformers:", transformers.__version__)
 print("flash-attn-3:", version("flash-attn-3"))
@@ -117,6 +121,7 @@ torch CUDA: 12.9
 GPUs: ['NVIDIA H100 80GB HBM3', 'NVIDIA H100 80GB HBM3']
 BF16: True
 axolotl: 0.18.0
+modal: 1.5.4
 vllm: 0.23.0+cu129
 transformers: 5.14.1
 flash-attn-3: 3.0.0

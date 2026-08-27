@@ -48,6 +48,17 @@ uv run rlvr-verifier-smoke
 
 Every completion runs in a fresh Modal Sandbox with network access disabled. Model-caused failures receive zero reward. Modal infrastructure errors are retried three times and then stop training.
 
+The trainer log records `Modal transport retry`, `Modal transport recovered`,
+and a summary for every verification batch. Monitor transport availability in
+another shell:
+
+```bash
+tail -F logs/train-direct-fft.log | grep --line-buffered 'Modal '
+```
+
+These messages report connectivity observed by the training machine; they do
+not by themselves prove a service-wide Modal outage.
+
 ## 3. Build the GPU Environment
 
 The documented setup targets two x86_64 H100 GPUs: one for the vLLM rollout server and one for training.
@@ -80,7 +91,12 @@ uv pip install \
 
 uv pip install \
   'https://huggingface.co/datasets/dudeperf3ct/qwen35-sft-wheels/resolve/main/causal-conv1d/py312-torch211-cu128/causal_conv1d-1.6.2.post1-cp312-cp312-linux_x86_64.whl'
+
+python scripts/patch_axolotl_018.py
 ```
+
+The final command applies the temporary Axolotl 0.18.0 and TRL 1.8.0
+compatibility fixes listed in [`docs/MANUAL_PATCHES.md`](docs/MANUAL_PATCHES.md). Run it again whenever Axolotl is reinstalled.
 
 > [!WARNING]
 > Axolotl pins an older Modal client for its cloud launcher, so reinstall Modal after Axolotl to keep the verifier on the current Sandbox filesystem API.

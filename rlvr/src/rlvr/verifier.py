@@ -1,9 +1,10 @@
 """Run generated Python against public tests in isolated Modal Sandboxes."""
 
+import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 import modal
@@ -14,6 +15,8 @@ SANDBOX_TIMEOUT_SECONDS = 30
 MAX_WORKERS = 8
 MAX_ATTEMPTS = 3
 OUTPUT_LIMIT = 4_000
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -30,6 +33,7 @@ class VerificationResult:
     passed: bool
     duration_seconds: float
     output: str = ""
+    attempts: int = 1
 
 
 class Verifier(Protocol):
@@ -46,20 +50,51 @@ class ModalVerifier:
     def verify_batch(self, requests: list[VerificationRequest]) -> list[VerificationResult]:
         if not requests:
             return []
+        started = time.monotonic()
         workers = min(MAX_WORKERS, len(requests))
         with ThreadPoolExecutor(max_workers=workers) as executor:
-            return list(executor.map(self._verify_with_retries, requests))
+            results = list(executor.map(self._verify_with_retries, requests))
+        retries = sum(result.attempts - 1 for result in results)
+        logger.info(
+            "Modal verification batch: requests=%d retries=%d max_attempts=%d duration=%.2fs",
+            len(requests),
+            retries,
+            max(result.attempts for result in results),
+            time.monotonic() - started,
+        )
+        return results
 
     def _verify_with_retries(self, request: VerificationRequest) -> VerificationResult:
         for attempt in range(MAX_ATTEMPTS):
             try:
-                return self._verify_once(request)
+                result = self._verify_once(request)
+                if attempt:
+                    logger.info(
+                        "Modal transport recovered: question_id=%s attempts=%d",
+                        request.question_id,
+                        attempt + 1,
+                    )
+                    return replace(result, attempts=attempt + 1)
+                return result
             except (modal.Error, TimeoutError, ConnectionError) as error:
                 if attempt == MAX_ATTEMPTS - 1:
+                    logger.error(
+                        "Modal transport unavailable: question_id=%s attempts=%d error=%s",
+                        request.question_id,
+                        MAX_ATTEMPTS,
+                        type(error).__name__,
+                    )
                     raise RuntimeError(
                         f"Modal verification failed for {request.question_id} after "
                         f"{MAX_ATTEMPTS} attempts"
                     ) from error
+                logger.warning(
+                    "Modal transport retry: question_id=%s attempt=%d/%d error=%s",
+                    request.question_id,
+                    attempt + 1,
+                    MAX_ATTEMPTS,
+                    type(error).__name__,
+                )
                 time.sleep(2**attempt)
         raise AssertionError("unreachable")
 

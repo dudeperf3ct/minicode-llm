@@ -1,4 +1,4 @@
-"""Axolotl-compatible binary code reward."""
+"""Axolotl-compatible rewards for verified code and reasoning format."""
 
 import ast
 from functools import cache
@@ -34,6 +34,35 @@ def code_reward(
     return score_completions(completions, test, question_id, style, verifier=default_verifier())
 
 
+def reasoning_format_reward(
+    prompts: list[list[dict[str, str]]],
+    completions: list[list[dict[str, str]]],
+    style: list[str],
+    **kwargs: Any,
+) -> list[float]:
+    """Reward a closed reasoning trace followed by syntactically valid code."""
+
+    del prompts, kwargs
+    return score_reasoning_format(completions, style)
+
+
+def score_reasoning_format(
+    completions: list[list[dict[str, str]]], styles: list[str]
+) -> list[float]:
+    if len(completions) != len(styles):
+        raise ValueError("Completion metadata lengths do not match")
+
+    rewards = [0.0] * len(completions)
+    for index, (completion, current_style) in enumerate(zip(completions, styles, strict=True)):
+        content = assistant_content(completion, current_style)
+        if "</think>" not in content:
+            continue
+        code = extract_valid_code(final_answer(content), current_style)
+        if code:
+            rewards[index] = 1.0
+    return rewards
+
+
 def score_completions(
     completions: list[list[dict[str, str]]],
     tests: list[str],
@@ -53,17 +82,9 @@ def score_completions(
     for index, (completion, tests_for_prompt, current_id, current_style) in enumerate(
         zip(completions, tests, question_ids, styles, strict=True)
     ):
-        if current_style != "instruct":
-            raise ValueError(f"Unsupported RLVR style: {current_style}")
-        if len(completion) != 1 or completion[0].get("role") != "assistant":
-            raise ValueError("Each completion must contain exactly one assistant message")
-        content = final_answer(completion[0].get("content", ""))
-        code = extract_code(content, current_style)
+        content = assistant_content(completion, current_style)
+        code = extract_valid_code(final_answer(content), current_style)
         if not code:
-            continue
-        try:
-            ast.parse(code)
-        except SyntaxError:
             continue
         requests.append(VerificationRequest(current_id, code, tests_for_prompt))
         request_indices.append(index)
@@ -77,3 +98,22 @@ def score_completions(
             raise RuntimeError("Verifier result order does not match request order")
         rewards[index] = 1.0 if result.passed else 0.0
     return rewards
+
+
+def assistant_content(completion: list[dict[str, str]], style: str) -> str:
+    if style != "instruct":
+        raise ValueError(f"Unsupported RLVR style: {style}")
+    if len(completion) != 1 or completion[0].get("role") != "assistant":
+        raise ValueError("Each completion must contain exactly one assistant message")
+    return completion[0].get("content", "")
+
+
+def extract_valid_code(content: str, style: str) -> str:
+    code = extract_code(content, style)
+    if not code:
+        return ""
+    try:
+        ast.parse(code)
+    except SyntaxError:
+        return ""
+    return code

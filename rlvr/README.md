@@ -5,7 +5,8 @@ Two matched LoRA GRPO experiments run on 1,000 verified Python prompts:
 1. Direct generation from the direct full-FT SFT checkpoint.
 2. Thinking-enabled generation from the reasoning full-FT SFT checkpoint.
 
-Both experiments use the same data, reward, sampling settings, and seed.
+Both experiments use the same data, group size, and seed. The reasoning run uses a larger
+rollout budget and reasoning-specific loss and reward settings.
 
 ## Experiments
 
@@ -14,13 +15,17 @@ Both experiments use the same data, reward, sampling settings, and seed.
 | Direct FFT | `configs/direct-fft.yml` | `dudeperf3ct/qwen35-4b-kodcode-sft-10k@34355613741e197528920acc211005f303524e58` | Disabled |
 | Reasoning FFT | `configs/reasoning-fft.yml` | `dudeperf3ct/qwen35-4b-kodcode-sft-10k@eed04fa11c7b7a9bbd4a129471d1a4e9bd2e1ece` | Enabled |
 
-Each run uses one epoch, seed 42, eight rollouts per prompt, and a binary reward: `1.0` when all public tests pass and `0.0` otherwise.
+Each run uses one epoch, seed 42, and eight rollouts per prompt. Test correctness remains
+binary: `1.0` when all public tests pass and `0.0` otherwise. The reasoning run adds a
+`0.05` format reward for a closed reasoning trace followed by valid Python.
 
 Tests execute in isolated Modal Sandboxes. The reasoning trace is not treated as code; only the final answer after `</think>` is verified.
 
 The runs produce at most 8,000 completions each. Groups where all eight rewards are equal have no GRPO learning signal and are skipped by Axolotl.
 
-Dataset preparation is documented in [`docs/README.md`](docs/README.md).
+Dataset preparation is documented in [`docs/README.md`](docs/README.md). Before launching the
+reasoning experiment, follow the dedicated [`docs/REASONING_RUN.md`](docs/REASONING_RUN.md)
+guide for its larger context budget, smoke test, early gate, and resume workflow.
 
 ## 1. Prepare the Environment
 
@@ -48,16 +53,13 @@ uv run rlvr-verifier-smoke
 
 Every completion runs in a fresh Modal Sandbox with network access disabled. Model-caused failures receive zero reward. Modal infrastructure errors are retried three times and then stop training.
 
-The trainer log records `Modal transport retry`, `Modal transport recovered`,
-and a summary for every verification batch. Monitor transport availability in
-another shell:
+The trainer log records `Modal transport retry`, `Modal transport recovered`, and a summary for every verification batch. Monitor transport availability in another shell:
 
 ```bash
 tail -F logs/train-direct-fft.log | grep --line-buffered 'Modal '
 ```
 
-These messages report connectivity observed by the training machine; they do
-not by themselves prove a service-wide Modal outage.
+These messages report connectivity observed by the training machine; they do not by themselves prove a service-wide Modal outage.
 
 ## 3. Build the GPU Environment
 
@@ -224,6 +226,9 @@ CUDA_VISIBLE_DEVICES=1 axolotl train configs/direct-fft.yml \
 
 After it finishes, stop the server and repeat with the reasoning config:
 
+> Follow [`docs/REASONING_RUN.md`](docs/REASONING_RUN.md) before starting this run. It defines
+> the required one-step smoke and the 32--50-step go/no-go gate.
+
 ```bash
 set -o pipefail
 
@@ -242,6 +247,10 @@ Outputs and W&B run names are:
 
 - `main-1k-direct-fft-grpo-lora-seed42`
 - `main-1k-reasoning-fft-grpo-lora-seed42`
+
+Both models use the `dudeperf3ct/qwen35-4b-kodcode-rlvr-1k` Hub repository.
+
+The direct and reasoning results are published on the `direct-fft` and`reasoning-fft` branches respectively, matching the SFT repository layout.
 
 Watch reward mean and standard deviation, `skipped_zero_adv_batches`, KL, entropy, gradient norm, completion length, and Modal errors.
 

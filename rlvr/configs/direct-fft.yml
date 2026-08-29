@@ -21,6 +21,9 @@ shuffle_merged_datasets: false
 seed: 42
 dataset_prepared_path: ./prepared/main-1k-direct-fft-grpo-lora-seed42
 output_dir: ./outputs/main-1k-direct-fft-grpo-lora-seed42
+hub_model_id: dudeperf3ct/qwen35-4b-kodcode-rlvr-1k
+hub_revision: direct-fft
+hub_strategy: checkpoint
 
 sequence_len: 8192
 sample_packing: false

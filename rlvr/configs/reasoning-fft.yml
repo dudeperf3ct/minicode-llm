@@ -21,8 +21,11 @@ shuffle_merged_datasets: false
 seed: 42
 dataset_prepared_path: ./prepared/main-1k-reasoning-fft-grpo-lora-seed42
 output_dir: ./outputs/main-1k-reasoning-fft-grpo-lora-seed42
+hub_model_id: dudeperf3ct/qwen35-4b-kodcode-rlvr-1k
+hub_revision: reasoning-fft
+hub_strategy: checkpoint
 
-sequence_len: 8192
+sequence_len: 12288
 sample_packing: false
 pad_to_sequence_len: false
 
@@ -60,7 +63,7 @@ vllm:
   tensor_parallel_size: 1
   gpu_memory_utilization: 0.85
   dtype: bfloat16
-  max_model_len: 8192
+  max_model_len: 12288
   enable_prefix_caching: true
   enforce_eager: true
 
@@ -74,31 +77,39 @@ trl:
   vllm_server_timeout: 600
   vllm_lora_sync: true
   vllm_sync_interval: 1
+  vllm_importance_sampling_correction: true
+  importance_sampling_level: token
+  vllm_importance_sampling_mode: token_truncate
+  vllm_importance_sampling_cap: 3.0
 
   generation_batch_size: 8
   num_generations: 8
-  max_completion_length: 2048
+  max_completion_length: 8192
   temperature: 0.7
   top_p: 0.95
+  top_k: 20
+  min_p: 0.0
   chat_template_kwargs:
     enable_thinking: true
 
   reward_funcs:
     - rlvr.rewards.code_reward
+    - rlvr.rewards.reasoning_format_reward
   reward_weights:
     - 1.0
+    - 0.05
 
   beta: 0.04
   num_iterations: 1
-  loss_type: grpo
-  scale_rewards: true
-  mask_truncated_completions: false
+  loss_type: dr_grpo
+  scale_rewards: false
+  mask_truncated_completions: true
   skip_zero_advantage_batches: true
   replay_buffer_size: 0
   reroll_start_fraction: 1.0
 
 logging_steps: 1
-saves_per_epoch: 2
+saves_per_epoch: 4
 
 use_wandb: true
 wandb_entity: dudeperf3ct

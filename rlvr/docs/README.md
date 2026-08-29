@@ -14,6 +14,10 @@ Run commands from the parent `rlvr/` directory.
 
 The RLVR dataset has one training split. It contains prompts, public tests, and selection metadata, but no reference solutions. Final model evaluation reuses the untouched SFT private test dataset; it is never part of RL training.
 
+The dataset was filtered against the original 8,192-token preparation budget. Every selected prompt also fits the reasoning experiment's 12,288-token runtime context with its 8,192-token completion allowance, so the reasoning changes do not require regenerating or republishing the dataset.
+
+See [`REASONING_RUN.md`](REASONING_RUN.md) for the reasoning-specific run procedure.
+
 ## Pinned References
 
 | Component | Version or identifier |

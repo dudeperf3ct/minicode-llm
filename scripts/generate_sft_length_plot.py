@@ -82,13 +82,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--source-root",
         type=Path,
-        default=Path("/home/dudeperf3ct/projects/mini-codellm/codellm_sft"),
+        default=Path("codellm_sft"),
         help="Path to the codellm_sft directory.",
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("static/images/sft_output_length_distribution.html"),
+        default=Path("images/sft_output_length_distribution.html"),
         help="HTML fragment written for the Hugo plotly shortcode.",
     )
     return parser.parse_args()

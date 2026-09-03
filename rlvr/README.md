@@ -23,9 +23,7 @@ Tests execute in isolated Modal Sandboxes. The reasoning trace is not treated as
 
 The runs produce at most 8,000 completions each. Groups where all eight rewards are equal have no GRPO learning signal and are skipped by Axolotl.
 
-Dataset preparation is documented in [`docs/README.md`](docs/README.md). Before launching the
-reasoning experiment, follow the dedicated [`docs/REASONING_RUN.md`](docs/REASONING_RUN.md)
-guide for its larger context budget, smoke test, early gate, and resume workflow.
+Dataset preparation is documented in [`docs/README.md`](docs/README.md).
 
 ## 1. Prepare the Environment
 
@@ -226,9 +224,6 @@ CUDA_VISIBLE_DEVICES=1 axolotl train configs/direct-fft.yml \
 
 After it finishes, stop the server and repeat with the reasoning config:
 
-> Follow [`docs/REASONING_RUN.md`](docs/REASONING_RUN.md) before starting this run. It defines
-> the required one-step smoke and the 32--50-step go/no-go gate.
-
 ```bash
 set -o pipefail
 
@@ -250,7 +245,7 @@ Outputs and W&B run names are:
 
 Both models use the `dudeperf3ct/qwen35-4b-kodcode-rlvr-1k` Hub repository.
 
-The direct and reasoning results are published on the `direct-fft` and`reasoning-fft` branches respectively, matching the SFT repository layout.
+The direct and reasoning results are published on the `direct-fft` and `reasoning-fft` branches respectively, matching the SFT repository layout.
 
 Watch reward mean and standard deviation, `skipped_zero_adv_batches`, KL, entropy, gradient norm, completion length, and Modal errors.
 

@@ -25,6 +25,10 @@ uv run eval-heldout \
   --output-root reports/test
 ```
 
+SFT configurations infer direct or reasoning mode from `split_thinking`.
+Other Axolotl configurations, such as RLVR, pass it explicitly with
+`--mode direct` or `--mode reasoning`.
+
 > [!WARNING]
 > The held-out verifier executes model-generated Python in local subprocesses.
 > Run it only inside a disposable experiment VM. Modal sandboxing is introduced
@@ -158,7 +162,7 @@ OPENAI_API_KEY=EMPTY ./scripts/run_evalplus.sh \
 
 The current SkyThought LiveCodeBench task files use `release_v2` and pins vllm to `0.7.0`. I have created a fork that upgrades the vllm to `0.25.1` and uses `release_v5` for livecodebench yaml files.
 
-Install the library into the same environment:
+Install the library in the new environment:
 
 ```bash
 uv pip install msgpack \

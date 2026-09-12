@@ -210,3 +210,8 @@ sft/outputs/
 sft/logs/
 evals/results/
 evals/logs/
+rlvr/logs/
+rlvr/models/
+rlvr/outputs/
+rlvr/prepared/
+rlvr/reports/

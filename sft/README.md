@@ -228,7 +228,7 @@ Every stage has distinct prepared-data, output, and W&B run paths. The root conf
 ## Main 10K Configurations
 
 > [!NOTE]
-> The dataset repository and immutable revision are documented in [`data/README.md`](data/README.md).
+> The dataset repository and immutable revision are documented in [`README.md`](docs/README.md).
 
 The W&B entity/project is `dudeperf3ct/qwen35-4b-kodcode-sft`.
 

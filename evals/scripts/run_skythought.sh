@@ -73,7 +73,7 @@ for TASK in \
 do
     echo "==> Running SkyThought: $TASK ($PROFILE)"
 
-    uv run --project "$PROJECT_DIR" skythought evaluate \
+    uv run --no-sync --project "$PROJECT_DIR" skythought evaluate \
         --model "$MODEL" \
         --task "$TASK" \
         "${BACKEND_ARGS[@]}" \

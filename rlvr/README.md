@@ -1,0 +1,380 @@
+# Qwen3.5-4B KodCode RLVR
+
+Two matched LoRA GRPO experiments run on 1,000 verified Python prompts:
+
+1. Direct generation from the direct full-FT SFT checkpoint.
+2. Thinking-enabled generation from the reasoning full-FT SFT checkpoint.
+
+Both experiments use the same data, group size, and seed. The reasoning run uses a larger
+rollout budget and reasoning-specific loss and reward settings.
+
+> Write-up: https://dudeperf3ct.github.io/projects/post_training_llm_rl/
+
+## Experiments
+
+| Experiment | Config | Starting checkpoint | Thinking |
+| --- | --- | --- | --- |
+| Direct FFT | `configs/direct-fft.yml` | `dudeperf3ct/qwen35-4b-kodcode-sft-10k@34355613741e197528920acc211005f303524e58` | Disabled |
+| Reasoning FFT | `configs/reasoning-fft.yml` | `dudeperf3ct/qwen35-4b-kodcode-sft-10k@eed04fa11c7b7a9bbd4a129471d1a4e9bd2e1ece` | Enabled |
+
+Each config plans one epoch with seed 42 and eight rollouts per prompt. The evaluated checkpoints are direct step 500 and reasoning step 250.
+
+Test correctness remains binary: `1.0` when all public tests pass and `0.0` otherwise. The reasoning run adds a `0.05` format reward for a closed reasoning trace followed by valid Python.
+
+Tests execute in isolated Modal Sandboxes. The reasoning trace is not treated as code; only the final answer after `</think>` is verified.
+
+A full epoch produces at most 8,000 completions per experiment. Groups where all eight rewards are equal have no GRPO learning signal and are skipped by Axolotl.
+
+Dataset preparation is documented in [`docs/README.md`](docs/README.md).
+
+## 1. Prepare the Environment
+
+Run commands from this directory:
+
+```bash
+cd rlvr
+uv sync --group dev
+source .venv/bin/activate
+```
+
+Authenticate the [Modal SDK](https://modal.com/) on every machine that calculates rewards:
+
+```bash
+modal setup
+```
+
+## 2. Test the Sandbox
+
+This requires no local GPU. It launches small remote CPU sandboxes and checks passing code, failing code, an execution timeout, and blocked outbound networking:
+
+```bash
+uv run rlvr-verifier-smoke
+```
+
+Every completion runs in a fresh Modal Sandbox with network access disabled. Model-caused failures receive zero reward. Modal infrastructure errors are retried three times and then stop training.
+
+The trainer log records `Modal transport retry`, `Modal transport recovered`, and a summary for every verification batch. Monitor transport availability in another shell:
+
+```bash
+tail -F logs/train-direct-fft.log | grep --line-buffered 'Modal '
+```
+
+These messages report connectivity observed by the training machine; they do not by themselves prove a service-wide Modal outage.
+
+## 3. Build the GPU Environment
+
+The documented setup targets two x86_64 H100 GPUs: one for the vLLM rollout server and one for training.
+
+```bash
+uv sync --group dev
+source .venv/bin/activate
+
+uv pip install \
+  'torch==2.11.0' \
+  'torchvision==0.26.0' \
+  --torch-backend=cu129
+
+uv pip install 'xformers==0.0.35'
+
+uv pip install --no-build-isolation \
+  'axolotl==0.18.0'
+
+uv pip install 'modal==1.5.4'
+
+uv pip install \
+  'https://github.com/vllm-project/vllm/releases/download/v0.23.0/vllm-0.23.0%2Bcu129-cp38-abi3-manylinux_2_28_x86_64.whl' \
+  --extra-index-url https://download.pytorch.org/whl/cu129
+
+uv pip install 'flash-linear-attention==0.4.1'
+
+uv pip install \
+  'flash-attn-3==3.0.0' \
+  --index-url https://download.pytorch.org/whl/cu129
+
+uv pip install \
+  'https://huggingface.co/datasets/dudeperf3ct/qwen35-sft-wheels/resolve/main/causal-conv1d/py312-torch211-cu128/causal_conv1d-1.6.2.post1-cp312-cp312-linux_x86_64.whl'
+
+python scripts/patch_axolotl_018.py
+```
+
+The final command applies the temporary Axolotl 0.18.0 and TRL 1.8.0
+compatibility fixes listed in [`docs/MANUAL_PATCHES.md`](docs/MANUAL_PATCHES.md). Run it again whenever Axolotl is reinstalled.
+
+> [!WARNING]
+> Axolotl pins an older Modal client for its cloud launcher, so reinstall Modal after Axolotl to keep the verifier on the current Sandbox filesystem API.
+
+Verify the training dependencies:
+
+```bash
+python - <<'PY'
+from importlib.metadata import version
+
+import flash_attn_interface
+import torch
+import transformers
+
+print("torch:", torch.__version__)
+print("torch CUDA:", torch.version.cuda)
+print(
+    "GPUs:",
+    [torch.cuda.get_device_name(index) for index in range(torch.cuda.device_count())],
+)
+print("BF16:", torch.cuda.is_bf16_supported())
+print("axolotl:", version("axolotl"))
+print("modal:", version("modal"))
+print("vllm:", version("vllm"))
+print("transformers:", transformers.__version__)
+print("flash-attn-3:", version("flash-attn-3"))
+print("flash-linear-attention:", version("flash-linear-attention"))
+print("causal-conv1d:", version("causal-conv1d"))
+print("xformers:", version("xformers"))
+PY
+```
+
+Observed on the two-H100 smoke-test instance:
+
+```text
+torch: 2.11.0+cu129
+torch CUDA: 12.9
+GPUs: ['NVIDIA H100 80GB HBM3', 'NVIDIA H100 80GB HBM3']
+BF16: True
+axolotl: 0.18.0
+modal: 1.5.4
+vllm: 0.23.0+cu129
+transformers: 5.14.1
+flash-attn-3: 3.0.0
+flash-linear-attention: 0.4.1
+causal-conv1d: 1.6.2.post1
+xformers: 0.0.35
+```
+
+Authenticate all three services on the GPU machine. Hugging Face loads the pinned model and dataset, W&B records the run, and Modal executes rewards:
+
+```bash
+hf auth login
+hf auth whoami
+wandb login
+modal setup
+modal profile current
+```
+
+Each config uses the Hugging Face repository plus an immutable `revision_of_model`. Hugging Face downloads that snapshot into its local cache, so the trainer and vLLM reuse the same files.
+
+## 4. Run a One-Step GPU Smoke
+
+Run both smokes before starting either full experiment. For each smoke, start its rollout server on GPU 0. Select one matching `CONFIG` and `RUN` pair:
+
+```bash
+CONFIG=configs/direct-fft.yml
+RUN=direct-fft
+# CONFIG=configs/reasoning-fft.yml
+# RUN=reasoning-fft
+
+mkdir -p logs
+set -o pipefail
+
+CUDA_VISIBLE_DEVICES=0 axolotl vllm-serve "$CONFIG" \
+  2>&1 | tee "logs/vllm-smoke-$RUN.log"
+```
+
+Wait for the server in another shell:
+
+```bash
+curl --fail http://127.0.0.1:8000/health/
+```
+
+Then run one optimizer step on GPU 1 using the same config:
+
+```bash
+CONFIG=configs/direct-fft.yml
+RUN=direct-fft
+# CONFIG=configs/reasoning-fft.yml
+# RUN=reasoning-fft
+
+set -o pipefail
+
+WANDB_MODE=offline \
+CUDA_VISIBLE_DEVICES=1 axolotl train "$CONFIG" \
+  --max-steps 1 \
+  --output-dir "./outputs/smoke-$RUN" \
+  2>&1 | tee "logs/train-smoke-$RUN.log"
+```
+
+Stop the vLLM process after each smoke because the trainer synchronized LoRA weights into it. Repeat with `configs/reasoning-fft.yml`, then review both smoke logs before proceeding.
+
+Separate smoke configs are unnecessary: the smoke uses the real experiment config and only overrides `max_steps` and `output_dir`. This avoids duplicating the training settings while keeping smoke outputs separate.
+
+## 5. Run the Full Experiments
+
+For the direct run, start a fresh server on GPU 0:
+
+```bash
+set -o pipefail
+
+CUDA_VISIBLE_DEVICES=0 axolotl vllm-serve configs/direct-fft.yml \
+  2>&1 | tee logs/vllm-direct-fft.log
+```
+
+Train in another shell on GPU 1:
+
+```bash
+set -o pipefail
+
+CUDA_VISIBLE_DEVICES=1 axolotl train configs/direct-fft.yml \
+  2>&1 | tee logs/train-direct-fft.log
+```
+
+After it finishes, stop the server and repeat with the reasoning config:
+
+```bash
+set -o pipefail
+
+CUDA_VISIBLE_DEVICES=0 axolotl vllm-serve configs/reasoning-fft.yml \
+  2>&1 | tee logs/vllm-reasoning-fft.log
+```
+
+```bash
+set -o pipefail
+
+CUDA_VISIBLE_DEVICES=1 axolotl train configs/reasoning-fft.yml \
+  2>&1 | tee logs/train-reasoning-fft.log
+```
+
+Outputs and W&B run names are:
+
+- `main-1k-direct-fft-grpo-lora-seed42`
+- `main-1k-reasoning-fft-grpo-lora-seed42`
+
+Both models use the `dudeperf3ct/qwen35-4b-kodcode-rlvr-1k` Hub repository.
+
+The direct and reasoning results are published on the `direct-fft` and `reasoning-fft` branches respectively, matching the SFT repository layout.
+
+Watch reward mean and standard deviation, `skipped_zero_adv_batches`, KL, entropy, gradient norm, completion length, and Modal errors.
+
+### Observed Training Costs
+
+Both experiments used one Lambda Cloud instance with two H100 80 GB GPUs at `$8.38/hour`. GPU 0 served vLLM rollouts and GPU 1 trained the LoRA adapter, so the instance price is not multiplied by two.
+
+| Run | Evaluated checkpoint | W&B runtime to checkpoint | GPU cost |
+| --- | ---: | ---: | ---: |
+| Direct FFT RLVR | 500 | 20h 14m 17s | $169.60 |
+| Reasoning FFT RLVR | 250 | 20h 30m 19s | $171.83 |
+
+The two evaluated checkpoints therefore used approximately **$341.43** of recorded GPU time. The trainers continued briefly to steps 543 and 260 before shutdown; their complete W&B session runtimes correspond to approximately **$358.81**.
+
+## 6. Evaluate Each Result
+
+Merge the evaluated checkpoints with their matching configs:
+
+```bash
+axolotl merge-lora configs/direct-fft.yml \
+  --lora-model-dir ./outputs/main-1k-direct-fft-grpo-lora-seed42/checkpoint-500
+
+axolotl merge-lora configs/reasoning-fft.yml \
+  --lora-model-dir ./outputs/main-1k-reasoning-fft-grpo-lora-seed42/checkpoint-250
+```
+
+Use the existing SFT evaluation workflow twice:
+
+| Result | Held-out mode | EvalPlus profile | Compare with |
+| --- | --- | --- | --- |
+| Direct RLVR | `direct` | `direct` | Direct FFT SFT |
+| Reasoning RLVR | `reasoning` | `thinking` | Reasoning FFT SFT |
+
+First serve the direct model. EvalPlus relies on the server's default chat template setting, while the held-out evaluator also sends it per request:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 vllm serve \
+  outputs/main-1k-direct-fft-grpo-lora-seed42/merged \
+  --served-model-name main-1k-direct-fft-grpo-lora-seed42 \
+  --reasoning-parser qwen3 \
+  --default-chat-template-kwargs '{"enable_thinking": false}' \
+  --language-model-only \
+  --dtype bfloat16 \
+  --max-model-len 32768 \
+  --gpu-memory-utilization 0.80
+```
+
+In another shell, run both direct evaluations:
+
+```bash
+uv run eval-heldout \
+  --config configs/direct-fft.yml \
+  --mode direct \
+  --dataset-manifest ../sft/manifests/evaluation.json \
+  --output-root reports/direct-fft-step500
+
+../evals/scripts/run_evalplus.sh \
+  main-1k-direct-fft-grpo-lora-seed42 \
+  reports/evalplus-direct-fft-step500 \
+  --profile direct \
+  --base-url http://127.0.0.1:8000/v1
+
+../evals/scripts/run_skythought.sh \
+  main-1k-direct-fft-grpo-lora-seed42 \
+  reports/livecodebench-direct-fft-step500 \
+  direct \
+  http://127.0.0.1:8000/v1
+```
+
+Stop the direct server, then serve the reasoning model with thinking enabled. The 65,536-token context supports EvalPlus's 32,768-token thinking budget:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 vllm serve \
+  outputs/main-1k-reasoning-fft-grpo-lora-seed42/merged \
+  --served-model-name main-1k-reasoning-fft-grpo-lora-seed42 \
+  --reasoning-parser qwen3 \
+  --default-chat-template-kwargs '{"enable_thinking": true}' \
+  --language-model-only \
+  --dtype bfloat16 \
+  --max-model-len 65536 \
+  --gpu-memory-utilization 0.80
+```
+
+In another shell, run both reasoning evaluations:
+
+```bash
+uv run eval-heldout \
+  --config configs/reasoning-fft.yml \
+  --mode reasoning \
+  --dataset-manifest ../sft/manifests/evaluation.json \
+  --output-root reports/reasoning-fft-step250
+
+../evals/scripts/run_evalplus.sh \
+  main-1k-reasoning-fft-grpo-lora-seed42 \
+  reports/evalplus-reasoning-fft-step250 \
+  --profile thinking \
+  --base-url http://127.0.0.1:8000/v1
+
+../evals/scripts/run_skythought.sh \
+  main-1k-reasoning-fft-grpo-lora-seed42 \
+  reports/livecodebench-reasoning-fft-step250 \
+  thinking \
+  http://127.0.0.1:8000/v1
+```
+
+A negative or neutral delta is still useful if the training metrics and evaluation artifacts explain what happened.
+
+### Observed Public Results
+
+Direct and thinking profiles use different decoding settings and token budgets, so compare each RLVR checkpoint only with its matched SFT starting checkpoint.
+
+| Profile | Checkpoint | HumanEval | HumanEval+ | MBPP | MBPP+ | LCB Easy | LCB Medium | LCB Hard |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Direct | Direct FFT SFT | 82.32% | 77.44% | 65.34% | 56.88% | 63.44% | 19.03% | 1.85% |
+| Direct | Direct RLVR step 500 | 79.27% | 74.39% | 66.40% | 56.08% | 63.80% | 18.13% | 1.85% |
+| Thinking | Reasoning FFT SFT | 84.76% | 78.66% | 80.42% | 67.20% | 78.49% | 36.86% | 7.04% |
+| Thinking | Reasoning RLVR step 250 | 81.71% | 75.61% | 80.40% | 69.00% | 81.00% | 34.74% | 7.78% |
+
+Neither RLVR checkpoint delivers a broad improvement over its SFT starting point.
+
+DirectRLVR is approximately neutral outside a three-point HumanEval regression.
+
+Reasoning RLVR trades the same HumanEval regression for small gains on MBPP+ and two LiveCodeBench difficulty bands. This supports changing prompt selection or reward shaping before paying for more steps.
+
+### Published Artifacts
+
+- Hugging Face stores the LoRA adapters and resumable checkpoints in
+  [`dudeperf3ct/qwen35-4b-kodcode-rlvr-1k`](https://huggingface.co/dudeperf3ct/qwen35-4b-kodcode-rlvr-1k), using the `direct-fft` and `reasoning-fft` branches.
+- W&B stores training telemetry and configuration artifacts for both stable run IDs.
+- `eval-heldout` uploads its compact summary and per-example results to the matching W&B run.

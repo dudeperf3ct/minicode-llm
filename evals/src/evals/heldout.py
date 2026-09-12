@@ -64,6 +64,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dataset-manifest", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
+    parser.add_argument("--mode", choices=("direct", "reasoning"))
     parser.add_argument("--max-tokens", type=int, default=16_384)
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--request-timeout", type=int, default=3600)
@@ -73,7 +74,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    run_config = load_evaluation_config(args.config)
+    run_config = load_evaluation_config(args.config, args.mode)
     output_dir = args.output_root / run_config.wandb.run_id
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -115,9 +116,13 @@ def main() -> None:
     print(f"Evaluation complete: {summary_path}")
 
 
-def load_evaluation_config(path: Path) -> EvaluationConfig:
+def load_evaluation_config(path: Path, mode: str | None = None) -> EvaluationConfig:
     config = yaml.safe_load(path.read_text(encoding="utf-8"))
-    mode = "reasoning" if config["datasets"][0]["split_thinking"] else "direct"
+    if mode is None:
+        try:
+            mode = "reasoning" if config["datasets"][0]["split_thinking"] else "direct"
+        except (KeyError, IndexError, TypeError) as error:
+            raise ValueError("Config does not declare SFT mode; pass --mode explicitly") from error
     return EvaluationConfig(wandb=WandbRun.from_axolotl_config(config), mode=mode)
 
 

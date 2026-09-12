@@ -1,6 +1,6 @@
 # Axolotl 0.18.0 Compatibility Patches
 
-The RLVR environment combines Axolotl 0.18.0 with TRL 1.8.0. Three small
+The RLVR environment combines Axolotl 0.18.0 with TRL 1.8.0. Four small
 compatibility fixes were needed while bringing up the two-H100 experiment.
 They modify the installed Axolotl package and are lost whenever Axolotl is
 reinstalled.
@@ -26,8 +26,12 @@ import axolotl
 
 root = Path(axolotl.__file__).parent
 serve = (root / "cli" / "vllm_serve.py").read_text()
+merge = (root / "cli" / "merge_lora.py").read_text()
+merge_utils = (root / "cli" / "utils" / "lora_merge.py").read_text()
 sync = (root / "monkeypatch" / "trainer" / "trl_vllm.py").read_text()
 assert "revision=cfg.revision_of_model" in serve
+assert "revision=cfg.revision_of_model" in merge
+assert "snapshot_download(str(base_model_path), revision=revision)" in merge_utils
 assert "self._dist.is_fsdp" in sync
 assert "self._dist.is_zero3" in sync
 print("Axolotl compatibility patches verified")
@@ -72,6 +76,16 @@ AttributeError: 'VLLMGeneration' object has no attribute 'is_fsdp_enabled'
 
 **Change:** use `self._dist.is_fsdp` and `self._dist.is_zero3` inside Axolotl's
 patched `sync_weights` method.
+
+### 4. Preserve the revision during efficient LoRA merging
+
+**Symptom:** `axolotl merge-lora` downloads the default Hugging Face revision
+and then reports that no model shards were found, even though
+`revision_of_model` points to a valid branch or commit containing the weights.
+
+**Change:** forward `cfg.revision_of_model` to the efficient merge helper and
+pass it to `snapshot_download`. This keeps merging on the same immutable SFT
+snapshot used by training and vLLM.
 
 ## Async prefetch
 

@@ -8,6 +8,8 @@ Two matched LoRA GRPO experiments run on 1,000 verified Python prompts:
 Both experiments use the same data, group size, and seed. The reasoning run uses a larger
 rollout budget and reasoning-specific loss and reward settings.
 
+> Write-up: https://dudeperf3ct.github.io/projects/post_training_llm_rl/
+
 ## Experiments
 
 | Experiment | Config | Starting checkpoint | Thinking |
@@ -15,13 +17,13 @@ rollout budget and reasoning-specific loss and reward settings.
 | Direct FFT | `configs/direct-fft.yml` | `dudeperf3ct/qwen35-4b-kodcode-sft-10k@34355613741e197528920acc211005f303524e58` | Disabled |
 | Reasoning FFT | `configs/reasoning-fft.yml` | `dudeperf3ct/qwen35-4b-kodcode-sft-10k@eed04fa11c7b7a9bbd4a129471d1a4e9bd2e1ece` | Enabled |
 
-Each run uses one epoch, seed 42, and eight rollouts per prompt. Test correctness remains
-binary: `1.0` when all public tests pass and `0.0` otherwise. The reasoning run adds a
-`0.05` format reward for a closed reasoning trace followed by valid Python.
+Each config plans one epoch with seed 42 and eight rollouts per prompt. The evaluated checkpoints are direct step 500 and reasoning step 250.
+
+Test correctness remains binary: `1.0` when all public tests pass and `0.0` otherwise. The reasoning run adds a `0.05` format reward for a closed reasoning trace followed by valid Python.
 
 Tests execute in isolated Modal Sandboxes. The reasoning trace is not treated as code; only the final answer after `</think>` is verified.
 
-The runs produce at most 8,000 completions each. Groups where all eight rewards are equal have no GRPO learning signal and are skipped by Axolotl.
+A full epoch produces at most 8,000 completions per experiment. Groups where all eight rewards are equal have no GRPO learning signal and are skipped by Axolotl.
 
 Dataset preparation is documented in [`docs/README.md`](docs/README.md).
 
@@ -249,16 +251,27 @@ The direct and reasoning results are published on the `direct-fft` and `reasonin
 
 Watch reward mean and standard deviation, `skipped_zero_adv_batches`, KL, entropy, gradient norm, completion length, and Modal errors.
 
+### Observed Training Costs
+
+Both experiments used one Lambda Cloud instance with two H100 80 GB GPUs at `$8.38/hour`. GPU 0 served vLLM rollouts and GPU 1 trained the LoRA adapter, so the instance price is not multiplied by two.
+
+| Run | Evaluated checkpoint | W&B runtime to checkpoint | GPU cost |
+| --- | ---: | ---: | ---: |
+| Direct FFT RLVR | 500 | 20h 14m 17s | $169.60 |
+| Reasoning FFT RLVR | 250 | 20h 30m 19s | $171.83 |
+
+The two evaluated checkpoints therefore used approximately **$341.43** of recorded GPU time. The trainers continued briefly to steps 543 and 260 before shutdown; their complete W&B session runtimes correspond to approximately **$358.81**.
+
 ## 6. Evaluate Each Result
 
-Merge each adapter with its matching config:
+Merge the evaluated checkpoints with their matching configs:
 
 ```bash
 axolotl merge-lora configs/direct-fft.yml \
-  --lora-model-dir ./outputs/main-1k-direct-fft-grpo-lora-seed42
+  --lora-model-dir ./outputs/main-1k-direct-fft-grpo-lora-seed42/checkpoint-500
 
 axolotl merge-lora configs/reasoning-fft.yml \
-  --lora-model-dir ./outputs/main-1k-reasoning-fft-grpo-lora-seed42
+  --lora-model-dir ./outputs/main-1k-reasoning-fft-grpo-lora-seed42/checkpoint-250
 ```
 
 Use the existing SFT evaluation workflow twice:
@@ -289,13 +302,19 @@ uv run eval-heldout \
   --config configs/direct-fft.yml \
   --mode direct \
   --dataset-manifest ../sft/manifests/evaluation.json \
-  --output-root reports/direct-fft
+  --output-root reports/direct-fft-step500
 
 ../evals/scripts/run_evalplus.sh \
   main-1k-direct-fft-grpo-lora-seed42 \
-  reports/evalplus-direct-fft \
+  reports/evalplus-direct-fft-step500 \
   --profile direct \
   --base-url http://127.0.0.1:8000/v1
+
+../evals/scripts/run_skythought.sh \
+  main-1k-direct-fft-grpo-lora-seed42 \
+  reports/livecodebench-direct-fft-step500 \
+  direct \
+  http://127.0.0.1:8000/v1
 ```
 
 Stop the direct server, then serve the reasoning model with thinking enabled. The 65,536-token context supports EvalPlus's 32,768-token thinking budget:
@@ -319,17 +338,43 @@ uv run eval-heldout \
   --config configs/reasoning-fft.yml \
   --mode reasoning \
   --dataset-manifest ../sft/manifests/evaluation.json \
-  --output-root reports/reasoning-fft
+  --output-root reports/reasoning-fft-step250
 
 ../evals/scripts/run_evalplus.sh \
   main-1k-reasoning-fft-grpo-lora-seed42 \
-  reports/evalplus-reasoning-fft \
+  reports/evalplus-reasoning-fft-step250 \
   --profile thinking \
   --base-url http://127.0.0.1:8000/v1
+
+../evals/scripts/run_skythought.sh \
+  main-1k-reasoning-fft-grpo-lora-seed42 \
+  reports/livecodebench-reasoning-fft-step250 \
+  thinking \
+  http://127.0.0.1:8000/v1
 ```
 
 A negative or neutral delta is still useful if the training metrics and evaluation artifacts explain what happened.
 
-> [!WARNING]
-> The shared held-out evaluator executes generated Python locally. Run it only
-> on the disposable evaluation VM. Training rewards always use Modal Sandboxes.
+### Observed Public Results
+
+Direct and thinking profiles use different decoding settings and token budgets, so compare each RLVR checkpoint only with its matched SFT starting checkpoint.
+
+| Profile | Checkpoint | HumanEval | HumanEval+ | MBPP | MBPP+ | LCB Easy | LCB Medium | LCB Hard |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Direct | Direct FFT SFT | 82.32% | 77.44% | 65.34% | 56.88% | 63.44% | 19.03% | 1.85% |
+| Direct | Direct RLVR step 500 | 79.27% | 74.39% | 66.40% | 56.08% | 63.80% | 18.13% | 1.85% |
+| Thinking | Reasoning FFT SFT | 84.76% | 78.66% | 80.42% | 67.20% | 78.49% | 36.86% | 7.04% |
+| Thinking | Reasoning RLVR step 250 | 81.71% | 75.61% | 80.40% | 69.00% | 81.00% | 34.74% | 7.78% |
+
+Neither RLVR checkpoint delivers a broad improvement over its SFT starting point.
+
+DirectRLVR is approximately neutral outside a three-point HumanEval regression.
+
+Reasoning RLVR trades the same HumanEval regression for small gains on MBPP+ and two LiveCodeBench difficulty bands. This supports changing prompt selection or reward shaping before paying for more steps.
+
+### Published Artifacts
+
+- Hugging Face stores the LoRA adapters and resumable checkpoints in
+  [`dudeperf3ct/qwen35-4b-kodcode-rlvr-1k`](https://huggingface.co/dudeperf3ct/qwen35-4b-kodcode-rlvr-1k), using the `direct-fft` and `reasoning-fft` branches.
+- W&B stores training telemetry and configuration artifacts for both stable run IDs.
+- `eval-heldout` uploads its compact summary and per-example results to the matching W&B run.
